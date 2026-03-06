@@ -1,4 +1,4 @@
-name: Publish to TFT-Framework Packages
+name: Publish to Spool-FRAMEWORK Packages
 on:
   push:
     branches: [ develop ]
@@ -23,4 +23,4 @@ jobs:
       - name: Publish to GitHub Packages
         run: mvn deploy -B --no-transfer-progress -DskipTests
         env:
-          GITHUB_TOKEN: ${{ secrets.PKG_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
