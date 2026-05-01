@@ -37,7 +37,7 @@ public class S3InboxEnvelopeRemoverProvider implements InboxEnvelopeRemoverProvi
     public InboxEnvelopeRemover create(PluginConfiguration configuration) {
         return new S3InboxRemover(
                 buildS3Client(configuration.require("region"), configuration.require("endpoint")),
-                configuration.require("bucketName"));
+                configuration.require("bucket"));
     }
 
     private S3Client buildS3Client(String region, String endpoint) {

@@ -7,12 +7,14 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.DataLakeWriterProvider;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.ingester.api.port.DataLakeWriter;
 
 import java.net.URI;
 
+@SpoolPlugin(DataLakeWriterProvider.class)
 public class S3DataLakeWriterProvider implements DataLakeWriterProvider {
     @Override
     public String name() {
@@ -35,7 +37,7 @@ public class S3DataLakeWriterProvider implements DataLakeWriterProvider {
     public DataLakeWriter create(PluginConfiguration configuration) {
         return new S3DataLakeWriter(
                 buildS3Client(configuration.require("region"), configuration.require("endpoint")),
-                configuration.require("bucketName"));
+                configuration.require("bucket"));
     }
 
     private S3Client buildS3Client(String region, String endpoint) {

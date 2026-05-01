@@ -175,7 +175,7 @@
         </dependency>
         <dependency>
             <groupId>io.github.spool-framework</groupId>
-            <artifactId>feeder</artifactId>
+            <artifactId>janitor</artifactId>
             <version>1.0.5-SNAPSHOT</version>
         </dependency>
         <dependency>

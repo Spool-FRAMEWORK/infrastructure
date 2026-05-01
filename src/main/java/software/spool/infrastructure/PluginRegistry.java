@@ -1,8 +1,7 @@
 package software.spool.infrastructure;
 
 import software.spool.infrastructure.spi.Plugin;
-import software.spool.infrastructure.spi.provider.EventBusProvider;
-import software.spool.infrastructure.spi.provider.PluginConfiguration;
+import software.spool.infrastructure.spi.provider.*;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,6 +14,16 @@ public final class PluginRegistry {
     static {
         ServiceLoader.load(EventBusProvider.class)
                 .forEach(p -> register(EventBusProvider.class, p));
+        ServiceLoader.load(InboxWriterProvider.class)
+                .forEach(p -> register(InboxWriterProvider.class, p));
+        ServiceLoader.load(InboxReaderProvider.class)
+                .forEach(p -> register(InboxReaderProvider.class, p));
+        ServiceLoader.load(InboxUpdaterProvider.class)
+                .forEach(p -> register(InboxUpdaterProvider.class, p));
+        ServiceLoader.load(InboxEnvelopeRemoverProvider.class)
+                .forEach(p -> register(InboxEnvelopeRemoverProvider.class, p));
+        ServiceLoader.load(DataLakeWriterProvider.class)
+                .forEach(p -> register(DataLakeWriterProvider.class, p));
     }
 
     public static <T extends Plugin<R>, R> void register(Class<T> type, T plugin) {

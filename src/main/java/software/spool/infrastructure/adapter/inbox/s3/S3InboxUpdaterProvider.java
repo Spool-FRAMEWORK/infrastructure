@@ -37,7 +37,7 @@ public class S3InboxUpdaterProvider implements InboxUpdaterProvider {
     public InboxUpdater create(PluginConfiguration configuration) {
         return new S3InboxUpdater(
                 buildS3Client(configuration.require("region"), configuration.require("endpoint")),
-                configuration.require("bucketName"));
+                configuration.require("bucket"));
     }
 
     private S3Client buildS3Client(String region, String endpoint) {
