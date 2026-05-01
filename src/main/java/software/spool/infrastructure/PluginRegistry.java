@@ -1,7 +1,7 @@
-package software.spool.infrastructure.spi;
+package software.spool.infrastructure;
 
 
-import software.spool.infrastructure.PluginBootStrap;
+import software.spool.infrastructure.spi.Plugin;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,9 +24,11 @@ public final class PluginRegistry {
     @SuppressWarnings("unchecked")
     public static <T extends Plugin> T get(Class<T> type, String name) {
         Map<String, Object> map = REGISTRY.get(type);
-        if (map == null) {
+        if (map == null)
             throw new IllegalStateException("No plugins registered for: " + type.getSimpleName());
-        }
-        return (T) map.get(name.toUpperCase());
+        T plugin = (T) map.get(name.toUpperCase());
+        if (plugin == null)
+            throw new IllegalStateException("No plugins registered for: " + type.getSimpleName() + " | " + name);
+        return plugin;
     }
 }

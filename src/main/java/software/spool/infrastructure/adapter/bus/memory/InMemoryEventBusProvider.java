@@ -1,22 +1,22 @@
-package software.spool.infrastructure.adapter.bus.kafka;
+package software.spool.infrastructure.adapter.bus.memory;
 
 import software.spool.core.port.bus.EventBus;
 import software.spool.infrastructure.PluginRegistry;
 import software.spool.infrastructure.spi.provider.EventBusProvider;
 
-public class KafkaEventBusProvider implements EventBusProvider {
+public class InMemoryEventBusProvider implements EventBusProvider {
     static {
-        PluginRegistry.register(EventBusProvider.class, new KafkaEventBusProvider());
+        PluginRegistry.register(EventBusProvider.class, new InMemoryEventBusProvider());
     }
 
     @Override
     public String name() {
-        return "KAFKA";
+        return "MEMORY";
     }
 
     @Override
     public int priority() {
-        return 10;
+        return 100;
     }
 
     @Override
@@ -26,6 +26,6 @@ public class KafkaEventBusProvider implements EventBusProvider {
 
     @Override
     public EventBus create(String url) {
-        return new KafkaEventBus(new KafkaEventBusConfig(url));
+        return new InMemoryEventBus();
     }
 }

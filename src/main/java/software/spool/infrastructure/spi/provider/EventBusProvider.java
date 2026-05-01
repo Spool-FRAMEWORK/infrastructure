@@ -7,4 +7,7 @@ public interface EventBusProvider extends Plugin {
     int priority();
     boolean supports(String url);
     EventBus create(String url);
+    default EventBus create() {
+        return create(null);
+    };
 }
