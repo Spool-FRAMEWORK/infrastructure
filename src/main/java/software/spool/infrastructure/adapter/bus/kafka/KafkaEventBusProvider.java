@@ -1,4 +1,4 @@
-package software.spool.infrastructure.bus.kafka;
+package software.spool.infrastructure.adapter.bus.kafka;
 
 import software.spool.core.port.bus.EventBus;
 import software.spool.infrastructure.spi.PluginRegistry;

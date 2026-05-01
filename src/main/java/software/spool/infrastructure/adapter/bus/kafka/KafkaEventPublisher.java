@@ -1,4 +1,4 @@
-package software.spool.infrastructure.bus.kafka;
+package software.spool.infrastructure.adapter.bus.kafka;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;

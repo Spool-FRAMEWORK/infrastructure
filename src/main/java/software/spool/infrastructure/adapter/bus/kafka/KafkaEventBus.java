@@ -1,4 +1,4 @@
-package software.spool.infrastructure.bus.kafka;
+package software.spool.infrastructure.adapter.bus.kafka;
 
 import software.spool.core.exception.EventBusEmitException;
 import software.spool.core.exception.EventBusSubscriptionException;

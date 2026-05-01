@@ -1,4 +1,4 @@
-package software.spool.infrastructure.bus.kafka;
+package software.spool.infrastructure.adapter.bus.kafka;
 
 public record KafkaEventBusConfig(String bootstrapServers) {
     public static KafkaEventBusConfig local() {

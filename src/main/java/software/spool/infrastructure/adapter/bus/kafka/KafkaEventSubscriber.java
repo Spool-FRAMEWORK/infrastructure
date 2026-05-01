@@ -1,4 +1,4 @@
-package software.spool.infrastructure.bus.kafka;
+package software.spool.infrastructure.adapter.bus.kafka;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
