@@ -1,10 +1,13 @@
 package software.spool.infrastructure;
 
 import software.spool.infrastructure.spi.provider.EventBusProvider;
+import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
 public class Main {
     public static void main(String[] args) {
-        PluginRegistry.get(EventBusProvider.class, "MEMORY")
-                .create();
+        PluginConfiguration config = PluginConfiguration.builder()
+                .with("bootstrap.servers", "localhost:9092")
+                .build();
+        PluginRegistry.resolve(EventBusProvider.class, PluginConfiguration.empty());
     }
 }

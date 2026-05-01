@@ -1,13 +1,12 @@
 package software.spool.infrastructure.adapter.bus.memory;
 
 import software.spool.core.port.bus.EventBus;
-import software.spool.infrastructure.PluginRegistry;
+import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.EventBusProvider;
+import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
+@SpoolPlugin(EventBusProvider.class)
 public class InMemoryEventBusProvider implements EventBusProvider {
-    static {
-        PluginRegistry.register(EventBusProvider.class, new InMemoryEventBusProvider());
-    }
 
     @Override
     public String name() {
@@ -20,12 +19,12 @@ public class InMemoryEventBusProvider implements EventBusProvider {
     }
 
     @Override
-    public boolean supports(String url) {
-        return url != null;
+    public boolean supports(PluginConfiguration configuration) {
+        return true;
     }
 
     @Override
-    public EventBus create(String url) {
+    public EventBus create(PluginConfiguration configuration) {
         return new InMemoryEventBus();
     }
 }

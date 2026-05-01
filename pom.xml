@@ -59,6 +59,42 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <executions>
+                    <execution>
+                        <id>compile-processor</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>compile</goal></goals>
+                        <configuration>
+                            <includes>
+                                <include>software/spool/infrastructure/spi/Plugin.java</include>
+                                <include>software/spool/infrastructure/spi/SpoolPlugin.java</include>
+                                <include>software/spool/infrastructure/spi/SpoolPluginProcessor.java</include>
+                                <include>software/spool/infrastructure/spi/provider/PluginConfiguration.java</include>
+                            </includes>
+                            <compilerArgument>-proc:none</compilerArgument>
+                            <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>compile</phase>
+                        <goals><goal>compile</goal></goals>
+                        <configuration>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>${project.groupId}</groupId>
+                                    <artifactId>${project.artifactId}</artifactId>
+                                    <version>${project.version}</version>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
                 <version>3.3.1</version>
                 <executions>

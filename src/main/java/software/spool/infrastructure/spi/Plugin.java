@@ -1,5 +1,10 @@
 package software.spool.infrastructure.spi;
 
-public interface Plugin {
+import software.spool.infrastructure.spi.provider.PluginConfiguration;
+
+public interface Plugin<T> {
     String name();
+    int priority();
+    boolean supports(PluginConfiguration configuration);
+    T create(PluginConfiguration configuration);
 }
