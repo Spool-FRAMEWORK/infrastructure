@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.github.spool-framework</groupId>
-    <artifactId>template</artifactId>
+    <artifactId>infrastructure</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
@@ -51,7 +51,7 @@
         <snapshotRepository>
             <id>github</id>
             <name>Spool-FRAMEWORK GitHub Packages</name>
-            <url>https://maven.pkg.github.com/Spool-FRAMEWORK/template</url>
+            <url>https://maven.pkg.github.com/Spool-FRAMEWORK/infrastructure</url>
         </snapshotRepository>
     </distributionManagement>
 
@@ -135,7 +135,7 @@
         <dependency>
             <groupId>io.github.spool-framework</groupId>
             <artifactId>core</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>1.0.18-SNAPSHOT</version>
         </dependency>
     </dependencies>
 </project>
