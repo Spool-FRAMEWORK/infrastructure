@@ -11,8 +11,7 @@ import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.IdempotencyKey;
-import software.spool.core.port.inbox.InboxEnvelopeResolver;
-import software.spool.core.port.inbox.InboxStatusQuery;
+import software.spool.core.port.inbox.InboxReader;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,7 +19,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-public class S3InboxReader implements InboxStatusQuery, InboxEnvelopeResolver {
+public class S3InboxReader implements InboxReader{
     private static final String INBOX_PREFIX = "inbox/";
     private final S3Client s3Client;
     private final String bucketName;
