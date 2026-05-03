@@ -4,6 +4,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.model.vo.*;
 import software.spool.ingester.api.port.DataLakeWriter;
 
@@ -24,12 +25,12 @@ public class S3DataLakeWriter implements DataLakeWriter {
     }
 
     @Override
-    public Stream<IdempotencyKey> write(Collection<Envelope> items) {
+    public Stream<IdempotencyKey> write(Collection<Envelope> envelopes) {
         List<IdempotencyKey> written = new ArrayList<>();
-        for (Envelope item : items) {
+        for (Envelope envelope : envelopes) {
             try {
-                byte[] payload = item.payload().getBytes(StandardCharsets.UTF_8);
-                String key = buildKey(item);
+                byte[] payload = RecordSerializerFactory.record().serialize(envelope).getBytes(StandardCharsets.UTF_8);
+                String key = "bronze/" + buildKey(envelope);
                 PutObjectRequest request = PutObjectRequest.builder()
                         .bucket(bucket)
                         .key(key)
@@ -37,9 +38,9 @@ public class S3DataLakeWriter implements DataLakeWriter {
                         .contentLength((long) payload.length)
                         .build();
                 s3Client.putObject(request, RequestBody.fromBytes(payload));
-                written.add(item.idempotencyKey());
+                written.add(envelope.idempotencyKey());
             } catch (Exception e) {
-                System.err.println(String.format("Failed to write item %s to S3, skipping", item.idempotencyKey()));
+                System.err.println(String.format("Failed to write envelope %s to S3, skipping", envelope.idempotencyKey()));
             }
         }
         return written.stream();
