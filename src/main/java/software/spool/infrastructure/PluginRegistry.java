@@ -7,23 +7,16 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class PluginRegistry {
+
     private static final Map<Class<?>, Map<String, Object>> REGISTRY = new ConcurrentHashMap<>();
+    private static final Set<Class<?>> LOADED = ConcurrentHashMap.newKeySet();
 
     private PluginRegistry() {}
 
-    static {
-        ServiceLoader.load(EventBusProvider.class)
-                .forEach(p -> register(EventBusProvider.class, p));
-        ServiceLoader.load(InboxWriterProvider.class)
-                .forEach(p -> register(InboxWriterProvider.class, p));
-        ServiceLoader.load(InboxReaderProvider.class)
-                .forEach(p -> register(InboxReaderProvider.class, p));
-        ServiceLoader.load(InboxUpdaterProvider.class)
-                .forEach(p -> register(InboxUpdaterProvider.class, p));
-        ServiceLoader.load(InboxEnvelopeRemoverProvider.class)
-                .forEach(p -> register(InboxEnvelopeRemoverProvider.class, p));
-        ServiceLoader.load(DataLakeWriterProvider.class)
-                .forEach(p -> register(DataLakeWriterProvider.class, p));
+    private static <T extends Plugin<R>, R> void ensureLoaded(Class<T> type) {
+        if (LOADED.add(type)) {
+            ServiceLoader.load(type).forEach(p -> register(type, p));
+        }
     }
 
     public static <T extends Plugin<R>, R> void register(Class<T> type, T plugin) {
@@ -33,6 +26,7 @@ public final class PluginRegistry {
 
     @SuppressWarnings("unchecked")
     public static <T extends Plugin<R>, R> T get(Class<T> type, String name) {
+        ensureLoaded(type);
         Map<String, Object> map = REGISTRY.get(type);
         if (map == null)
             throw new IllegalStateException("No plugins registered for: " + type.getSimpleName());
@@ -44,6 +38,7 @@ public final class PluginRegistry {
 
     @SuppressWarnings("unchecked")
     public static <T extends Plugin<R>, R> R resolve(Class<T> type, PluginConfiguration configuration) {
+        ensureLoaded(type);
         Map<String, Object> map = REGISTRY.get(type);
         if (map == null)
             throw new IllegalStateException("No plugins registered for: " + type.getSimpleName());
