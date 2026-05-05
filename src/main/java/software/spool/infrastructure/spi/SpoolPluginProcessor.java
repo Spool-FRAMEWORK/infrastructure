@@ -65,19 +65,28 @@ public class SpoolPluginProcessor extends AbstractProcessor {
     private void writeServiceFiles() {
         for (Map.Entry<String, Set<String>> entry : serviceEntries.entrySet()) {
             try {
+                Set<String> existing = new LinkedHashSet<>();
+                try {
+                    FileObject existing_file = processingEnv.getFiler().getResource(
+                            StandardLocation.CLASS_OUTPUT, "", "META-INF/services/" + entry.getKey()
+                    );
+                    try (var reader = new java.io.BufferedReader(existing_file.openReader(true))) {
+                        reader.lines().filter(l -> !l.isBlank()).forEach(existing::add);
+                    }
+                } catch (IOException ignored) {
+                }
+
+                existing.addAll(entry.getValue());
+
                 FileObject file = processingEnv.getFiler().createResource(
-                        StandardLocation.CLASS_OUTPUT,
-                        "",
-                        "META-INF/services/" + entry.getKey()
+                        StandardLocation.CLASS_OUTPUT, "", "META-INF/services/" + entry.getKey()
                 );
                 try (PrintWriter writer = new PrintWriter(file.openWriter())) {
-                    entry.getValue().forEach(writer::println);
+                    existing.forEach(writer::println);
                 }
             } catch (IOException e) {
-                processingEnv.getMessager().printMessage(
-                        Diagnostic.Kind.ERROR,
-                        "Failed to write META-INF/services for " + entry.getKey() + ": " + e.getMessage()
-                );
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
+                        "Failed to write META-INF/services for " + entry.getKey() + ": " + e.getMessage());
             }
         }
     }
