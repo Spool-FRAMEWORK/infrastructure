@@ -6,6 +6,7 @@ import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.InboxReadException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
@@ -112,14 +113,8 @@ public class S3InboxReader implements InboxReader{
                 .as(EventMetadata.class)
                 .deserialize(dto.metadata());
 
-        return new Envelope(
-                new IdempotencyKey(dto.idempotencyKey()),
-                metadata,
-                dto.payload(),
-                EnvelopeStatus.valueOf(dto.status()),
-                dto.retries(),
-                dto.capturedAt()
-        );
+        return PayloadDeserializerFactory.json().as(Envelope.class)
+                .deserialize(RecordSerializerFactory.record().serialize(dto));
     }
 
     record EnvelopeDto(

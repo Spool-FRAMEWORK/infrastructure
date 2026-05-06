@@ -1,10 +1,11 @@
 package software.spool.infrastructure.adapter.inbox.filesystem;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxEnvelopeRemover;
+import software.spool.core.port.serde.PayloadDeserializer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,7 +16,7 @@ import java.util.List;
 
 public class FileSystemInboxEnvelopeRemover implements InboxEnvelopeRemover {
     private final String path;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final PayloadDeserializer<Envelope> deserializer = PayloadDeserializerFactory.json().as(Envelope.class);
 
     public FileSystemInboxEnvelopeRemover(String path) {
         this.path = path;
@@ -29,7 +30,7 @@ public class FileSystemInboxEnvelopeRemover implements InboxEnvelopeRemover {
                 Path dataFile = Path.of(path, status.name(), key.value() + ".json");
                 try {
                     if (Files.exists(dataFile)) {
-                        Envelope envelope = mapper.readValue(dataFile.toFile(), Envelope.class);
+                        Envelope envelope = deserializer.deserialize(Files.readString(dataFile));
                         Files.delete(dataFile);
                         removed.add(envelope);
                         break;

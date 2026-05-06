@@ -1,11 +1,12 @@
 package software.spool.infrastructure.adapter.inbox.filesystem;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.exception.InboxReadException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxReader;
+import software.spool.core.port.serde.PayloadDeserializer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,7 +19,7 @@ import java.util.stream.Stream;
 
 public class FileSystemInboxReader implements InboxReader {
     private final String path;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final PayloadDeserializer<Envelope> deserializer = PayloadDeserializerFactory.json().as(Envelope.class);
 
     public FileSystemInboxReader(String path) {
         this.path = path;
@@ -30,7 +31,7 @@ public class FileSystemInboxReader implements InboxReader {
             for (EnvelopeStatus status : EnvelopeStatus.values()) {
                 Path dataFile = Path.of(path, status.name(), idempotencyKey.value() + ".json");
                 if (Files.exists(dataFile)) {
-                    return Optional.of(mapper.readValue(dataFile.toFile(), Envelope.class));
+                    return Optional.of(deserializer.deserialize(Files.readString(dataFile)));
                 }
             }
             return Optional.empty();
@@ -52,7 +53,7 @@ public class FileSystemInboxReader implements InboxReader {
             List<Envelope> result = new ArrayList<>();
             try (Stream<Path> files = Files.list(statusDir)) {
                 for (Path file : files.filter(p -> p.toString().endsWith(".json")).toList()) {
-                    result.add(mapper.readValue(file.toFile(), Envelope.class));
+                    result.add(deserializer.deserialize(Files.readString(file)));
                 }
             }
             return result;

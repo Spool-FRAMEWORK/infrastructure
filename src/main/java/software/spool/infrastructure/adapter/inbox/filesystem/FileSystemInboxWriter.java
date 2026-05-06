@@ -1,11 +1,12 @@
 package software.spool.infrastructure.adapter.inbox.filesystem;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.DuplicateEventException;
 import software.spool.core.exception.InboxWriteException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
+import software.spool.core.port.serde.RecordSerializer;
 import software.spool.crawler.api.port.InboxWriter;
 
 import java.io.IOException;
@@ -14,7 +15,7 @@ import java.nio.file.Path;
 
 public class FileSystemInboxWriter implements InboxWriter {
     private final String path;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final RecordSerializer<Envelope> serializer = RecordSerializerFactory.record();
 
     public FileSystemInboxWriter(String path) {
         this.path = path;
@@ -32,7 +33,7 @@ public class FileSystemInboxWriter implements InboxWriter {
                     throw new DuplicateEventException(key);
                 }
             }
-            Files.writeString(dataFile, mapper.writeValueAsString(envelope));
+            Files.writeString(dataFile, serializer.serialize(envelope));
             return key;
         } catch (IOException e) {
             throw new InboxWriteException(e.getMessage());

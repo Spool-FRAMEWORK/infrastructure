@@ -1,11 +1,12 @@
 package software.spool.infrastructure.adapter.inbox.filesystem;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.exception.InboxUpdateException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxUpdater;
+import software.spool.core.port.serde.PayloadDeserializer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,7 +18,7 @@ import java.util.List;
 
 public class FileSystemInboxUpdater implements InboxUpdater {
     private final String path;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final PayloadDeserializer<Envelope> deserializer = PayloadDeserializerFactory.json().as(Envelope.class);
 
     public FileSystemInboxUpdater(String path) {
         this.path = path;
@@ -37,7 +38,7 @@ public class FileSystemInboxUpdater implements InboxUpdater {
             }
             if (source == null) continue;
             try {
-                Envelope envelope = mapper.readValue(source.toFile(), Envelope.class);
+                Envelope envelope = deserializer.deserialize(Files.readString(source));
                 Path targetDir = Path.of(path, status.name());
                 Files.createDirectories(targetDir);
                 Files.move(source, targetDir.resolve(key.value() + ".json"), StandardCopyOption.REPLACE_EXISTING);

@@ -10,7 +10,7 @@ public class InMemoryEventBusProvider implements EventBusProvider {
 
     @Override
     public String name() {
-        return "MEMORY";
+        return "IN_MEMORY";
     }
 
     @Override

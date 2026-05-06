@@ -6,6 +6,7 @@ import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.InboxUpdateException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
@@ -106,14 +107,8 @@ public class S3InboxUpdater implements InboxUpdater {
                 .as(EventMetadata.class)
                 .deserialize(dto.metadata());
 
-        return new Envelope(
-                idempotencyKey,
-                metadata,
-                dto.payload(),
-                newStatus,
-                dto.retries(),
-                dto.capturedAt()
-        );
+        return PayloadDeserializerFactory.json().as(Envelope.class)
+                .deserialize(RecordSerializerFactory.record().serialize(dto)).withStatus(newStatus);
     }
 
     record EnvelopeDto(
