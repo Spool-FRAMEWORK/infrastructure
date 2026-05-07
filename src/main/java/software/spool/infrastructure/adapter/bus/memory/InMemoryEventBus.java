@@ -24,6 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * </p>
  */
 public class InMemoryEventBus implements EventBus {
+    private static final EventBus BUS = new InMemoryEventBus();
     private final ConcurrentHashMap<Class<? extends Event>, CopyOnWriteArrayList<Handler<?>>> registry =
             new ConcurrentHashMap<>();
     private final EventRouter router;
@@ -34,6 +35,10 @@ public class InMemoryEventBus implements EventBus {
 
     public InMemoryEventBus() {
         this(new DefaultEventRouter());
+    }
+
+    public static EventBus instance() {
+        return BUS;
     }
 
     @Override
@@ -62,7 +67,7 @@ public class InMemoryEventBus implements EventBus {
         } catch (Exception e) {
             throw new EventBusEmitException(
                     event,
-                    "Failed to publish event to destination [" + router.resolve(event.getClass()) + "]",
+                    "Failed to publish event to destination [" + router.resolve(event.getClass()) + "]; " + e.getMessage(),
                     e
             );
         }

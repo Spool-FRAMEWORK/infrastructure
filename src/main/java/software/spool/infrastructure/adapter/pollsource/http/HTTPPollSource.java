@@ -23,7 +23,7 @@ public class HTTPPollSource implements PollSource<String> {
     }
 
     @Override
-    public String poll() throws SpoolException {
+    public String fetch() throws SpoolException {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))

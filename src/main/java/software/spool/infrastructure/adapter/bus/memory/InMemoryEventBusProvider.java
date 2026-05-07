@@ -25,6 +25,6 @@ public class InMemoryEventBusProvider implements EventBusProvider {
 
     @Override
     public EventBus create(PluginConfiguration configuration) {
-        return new InMemoryEventBus();
+        return InMemoryEventBus.instance();
     }
 }
