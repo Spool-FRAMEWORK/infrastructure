@@ -119,8 +119,8 @@ public class S3InboxReader implements InboxReader{
 
     record EnvelopeDto(
             String idempotencyKey,
-            String metadata,
-            String payload,
+            byte[] metadata,
+            byte[] payload,
             String status,
             int retries,
             Instant capturedAt

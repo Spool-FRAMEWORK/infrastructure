@@ -30,7 +30,7 @@ public class FileSystemInboxEnvelopeRemover implements InboxEnvelopeRemover {
                 Path dataFile = Path.of(path, status.name(), key.value() + ".json");
                 try {
                     if (Files.exists(dataFile)) {
-                        Envelope envelope = deserializer.deserialize(Files.readString(dataFile));
+                        Envelope envelope = deserializer.deserialize(Files.readAllBytes(dataFile));
                         Files.delete(dataFile);
                         removed.add(envelope);
                         break;

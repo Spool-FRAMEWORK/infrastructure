@@ -38,7 +38,7 @@ public class FileSystemInboxUpdater implements InboxUpdater {
             }
             if (source == null) continue;
             try {
-                Envelope envelope = deserializer.deserialize(Files.readString(source));
+                Envelope envelope = deserializer.deserialize(Files.readAllBytes(source));
                 Path targetDir = Path.of(path, status.name());
                 Files.createDirectories(targetDir);
                 Files.move(source, targetDir.resolve(key.value() + ".json"), StandardCopyOption.REPLACE_EXISTING);

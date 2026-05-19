@@ -41,7 +41,7 @@ public class FileSystemDataLakeWriter implements DataLakeWriter {
                     .deserialize(envelope.metadata().get(EventMetadataKey.PARTITION_SCHEMA));
             Path file = Path.of(path,  PartitionKey.of(partitionKeySchema).from(envelope.payload()).value().replace("::", "/") + "/" + key.value() + ".json");
             Files.createDirectories(file.getParent());
-            Files.writeString(file, serializer.serialize(envelope));
+            Files.write(file, serializer.serialize(envelope));
             return key;
         } catch (IOException e) {
             return null;

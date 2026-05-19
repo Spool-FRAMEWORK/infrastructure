@@ -31,7 +31,7 @@ public class FileSystemInboxReader implements InboxReader {
             for (EnvelopeStatus status : EnvelopeStatus.values()) {
                 Path dataFile = Path.of(path, status.name(), idempotencyKey.value() + ".json");
                 if (Files.exists(dataFile)) {
-                    return Optional.of(deserializer.deserialize(Files.readString(dataFile)));
+                    return Optional.of(deserializer.deserialize(Files.readAllBytes(dataFile)));
                 }
             }
             return Optional.empty();
@@ -53,7 +53,7 @@ public class FileSystemInboxReader implements InboxReader {
             List<Envelope> result = new ArrayList<>();
             try (Stream<Path> files = Files.list(statusDir)) {
                 for (Path file : files.filter(p -> p.toString().endsWith(".json")).toList()) {
-                    result.add(deserializer.deserialize(Files.readString(file)));
+                    result.add(deserializer.deserialize(Files.readAllBytes(file)));
                 }
             }
             return result;

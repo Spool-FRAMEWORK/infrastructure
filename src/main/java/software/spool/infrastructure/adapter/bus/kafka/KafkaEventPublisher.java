@@ -32,8 +32,7 @@ public class KafkaEventPublisher implements EventPublisher, AutoCloseable {
     public <E extends Event> void publish(E event) throws EventBusEmitException {
         try {
             byte[] payload = RecordSerializerFactory.record()
-                    .serialize(event)
-                    .getBytes(StandardCharsets.UTF_8);
+                    .serialize(event);
 
             ProducerRecord<String, byte[]> record =
                     new ProducerRecord<>(router.resolve(event.getClass()), payload);

@@ -113,8 +113,8 @@ public class S3InboxUpdater implements InboxUpdater {
 
     record EnvelopeDto(
             String idempotencyKey,
-            String metadata,
-            String payload,
+            byte[] metadata,
+            byte[] payload,
             String status,
             int retries,
             Instant capturedAt

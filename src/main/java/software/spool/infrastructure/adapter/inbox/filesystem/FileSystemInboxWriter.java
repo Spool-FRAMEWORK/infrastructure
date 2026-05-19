@@ -33,7 +33,7 @@ public class FileSystemInboxWriter implements InboxWriter {
                     throw new DuplicateEventException(key);
                 }
             }
-            Files.writeString(dataFile, serializer.serialize(envelope));
+            Files.write(dataFile, serializer.serialize(envelope));
             return key;
         } catch (IOException e) {
             throw new InboxWriteException(e.getMessage());

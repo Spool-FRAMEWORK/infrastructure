@@ -29,7 +29,7 @@ public class S3DataLakeWriter implements DataLakeWriter {
         List<IdempotencyKey> written = new ArrayList<>();
         for (Envelope envelope : envelopes) {
             try {
-                byte[] payload = RecordSerializerFactory.record().serialize(envelope).getBytes(StandardCharsets.UTF_8);
+                byte[] payload = RecordSerializerFactory.record().serialize(envelope);
                 String key = "bronze/" + buildKey(envelope);
                 PutObjectRequest request = PutObjectRequest.builder()
                         .bucket(bucket)
