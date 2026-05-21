@@ -8,7 +8,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.spool.infrastructure.spi.SpoolPlugin;
-import software.spool.infrastructure.spi.provider.DataLakeWriterProvider;
+import software.spool.infrastructure.spi.provider.dataLake.DataLakeWriterProvider;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.ingester.api.port.DataLakeWriter;
 

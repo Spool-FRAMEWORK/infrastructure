@@ -2,7 +2,7 @@ package software.spool.infrastructure.adapter.inbox.filesystem;
 
 import software.spool.core.port.inbox.InboxReader;
 import software.spool.infrastructure.spi.SpoolPlugin;
-import software.spool.infrastructure.spi.provider.InboxReaderProvider;
+import software.spool.infrastructure.spi.provider.inbox.InboxReaderProvider;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
 @SpoolPlugin(InboxReaderProvider.class)

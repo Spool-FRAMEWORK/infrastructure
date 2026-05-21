@@ -1,4 +1,4 @@
-package software.spool.infrastructure.spi.provider;
+package software.spool.infrastructure.spi.provider.bus;
 
 import software.spool.core.port.bus.EventBus;
 import software.spool.infrastructure.spi.Plugin;

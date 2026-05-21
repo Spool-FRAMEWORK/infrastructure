@@ -2,7 +2,7 @@ package software.spool.infrastructure.adapter.inbox.filesystem;
 
 import software.spool.core.port.inbox.InboxEnvelopeRemover;
 import software.spool.infrastructure.spi.SpoolPlugin;
-import software.spool.infrastructure.spi.provider.InboxEnvelopeRemoverProvider;
+import software.spool.infrastructure.spi.provider.inbox.InboxEnvelopeRemoverProvider;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
 @SpoolPlugin(InboxEnvelopeRemoverProvider.class)

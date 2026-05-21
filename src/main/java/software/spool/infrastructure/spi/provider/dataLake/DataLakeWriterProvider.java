@@ -1,4 +1,4 @@
-package software.spool.infrastructure.spi.provider;
+package software.spool.infrastructure.spi.provider.dataLake;
 
 import software.spool.infrastructure.spi.Plugin;
 import software.spool.ingester.api.port.DataLakeWriter;

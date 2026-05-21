@@ -9,7 +9,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
-public class HTTPPollSource implements PollSource<String> {
+public class HTTPPollSource implements PollSource<byte[]> {
     private final HttpClient httpClient;
     private final String url;
     private final String sourceId;
@@ -23,7 +23,7 @@ public class HTTPPollSource implements PollSource<String> {
     }
 
     @Override
-    public String fetch() throws SpoolException {
+    public byte[] fetch() throws SpoolException {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -32,8 +32,8 @@ public class HTTPPollSource implements PollSource<String> {
                     .GET()
                     .build();
 
-            HttpResponse<String> response = httpClient.send(
-                    request, HttpResponse.BodyHandlers.ofString()
+            HttpResponse<byte[]> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofByteArray()
             );
 
             if (response.statusCode() != 200) {

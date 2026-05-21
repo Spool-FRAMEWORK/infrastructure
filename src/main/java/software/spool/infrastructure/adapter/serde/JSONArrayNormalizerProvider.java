@@ -10,7 +10,7 @@ import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.infrastructure.spi.provider.serde.NormalizerProvider;
 
 @SpoolPlugin(NormalizerProvider.class)
-public class JSONArrayProvider implements NormalizerProvider {
+public class JSONArrayNormalizerProvider implements NormalizerProvider {
     @Override
     public String name() {
         return "JSON_ARRAY_NORMALIZER";
@@ -27,7 +27,7 @@ public class JSONArrayProvider implements NormalizerProvider {
     }
 
     @Override
-    public Normalizer<JsonNode, JsonNode, JsonNode> create(PluginConfiguration configuration) {
+    public Normalizer<?, ?, ?> create(PluginConfiguration configuration) {
         return new Normalizer<>(
                 PayloadDeserializerFactory.json().asNode(),
                 PayloadExtractorFactory.withRules(PayloadDeserializerFactory.json().asList(EnrichmentRule.class)
