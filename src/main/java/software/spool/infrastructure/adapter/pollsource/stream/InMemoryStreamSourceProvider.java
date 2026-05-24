@@ -31,7 +31,7 @@ public class InMemoryStreamSourceProvider implements StreamSourceProvider {
         try {
             return new InMemoryStreamSource<>(
                     PluginResolver.resolve(EventBusProvider.class, configuration),
-                    (Class<Event>) Class.forName(configuration.require("eventClassName")),
+                    (Class<Event>) Class.forName("events." + configuration.require("eventClassName")),
                     configuration.require("sourceId")
             );
         } catch (ClassNotFoundException e) {

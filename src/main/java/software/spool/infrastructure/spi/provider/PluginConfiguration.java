@@ -70,4 +70,12 @@ public final class PluginConfiguration {
             return new PluginConfiguration(map, context);
         }
     }
+
+    @Override
+    public String toString() {
+        return "PluginConfiguration{" +
+                "properties=" + properties +
+                ", context=" + context +
+                '}';
+    }
 }
