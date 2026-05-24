@@ -1,13 +1,14 @@
 package software.spool.infrastructure.spi.provider;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 public final class PluginConfiguration {
     private final Map<String, String> properties;
 
     private PluginConfiguration(Map<String, String> properties) {
-        this.properties = Map.copyOf(properties);
+        this.properties = Objects.isNull(properties) ? Map.of() : Map.copyOf(properties);
     }
 
     public static PluginConfiguration empty() {
