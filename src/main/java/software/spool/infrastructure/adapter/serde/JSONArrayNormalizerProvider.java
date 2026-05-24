@@ -1,6 +1,5 @@
 package software.spool.infrastructure.adapter.serde;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import software.spool.core.adapter.jackson.*;
 import software.spool.core.port.serde.EnrichmentRule;
 import software.spool.crawler.internal.utils.factory.Normalizer;
@@ -32,7 +31,7 @@ public class JSONArrayNormalizerProvider implements NormalizerProvider {
                 PayloadDeserializerFactory.json().asNode(),
                 PayloadExtractorFactory.withRules(PayloadDeserializerFactory.json().asList(EnrichmentRule.class)
                         .deserialize(configuration.require("rules").getBytes())),
-                PayloadLocatorFactory.fromRootPath(configuration.require("rules")),
+                PayloadLocatorFactory.fromRootPath(configuration.require("rootPath")),
                 PayloadSplitterFactory.jsonArray(),
                 RecordEnricherFactory.json(),
                 RecordSerializerFactory.jsonNode());
