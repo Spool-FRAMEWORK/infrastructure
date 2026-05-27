@@ -29,8 +29,8 @@ public class FileSystemPartitionedReaderProvider implements PartitionedReaderPro
     }
 
     @Override
-    public PartitionedReader<GenericRecord> create(PluginConfiguration configuration) {
-        return new FileSystemPartitionedReader<>(
+    public PartitionedReader create(PluginConfiguration configuration) {
+        return new FileSystemPartitionedReader(
                 configuration.require("path"),
                 buildDeserializer()
         );

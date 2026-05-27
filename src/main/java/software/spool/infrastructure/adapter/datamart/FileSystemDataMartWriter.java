@@ -1,7 +1,9 @@
 package software.spool.infrastructure.adapter.datamart;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.model.vo.IdempotencyKey;
+import software.spool.core.port.serde.RecordSerializer;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.DataMartWriter;
 import software.spool.mounter.api.port.MountTarget;
@@ -13,13 +15,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
-public class FileSystemDataMartWriter implements DataMartWriter<GenericRecord> {
+public class FileSystemDataMartWriter<O> implements DataMartWriter<O> {
     private final Path basePath;
-    private final ObjectMapper mapper;
+    private final RecordSerializer<O> serializer;
 
     public FileSystemDataMartWriter(Path basePath) {
         this.basePath = basePath;
-        this.mapper = new ObjectMapper();
+        this.serializer = RecordSerializerFactory.record();
     }
 
     public FileSystemDataMartWriter(String basePath) {
@@ -27,14 +29,14 @@ public class FileSystemDataMartWriter implements DataMartWriter<GenericRecord> {
     }
 
     @Override
-    public void write(MountTarget target, Stream<PartitionedRecord<GenericRecord>> result) {
+    public void write(MountTarget target, Stream<PartitionedRecord<O>> result) {
         result.forEach(partitioned -> {
             String partitionPath = partitioned.partitionKey().value().replace("::", "/");
             Path dir = basePath.resolve(target.qualifiedDataMart()).resolve(partitionPath);
             try {
                 Files.createDirectories(dir);
-                Path file = dir.resolve("data.json");
-                mapper.writeValue(file.toFile(), partitioned.record().toMap());
+                Path file = dir.resolve(IdempotencyKey.of(target.dataMart(), partitioned.record().toString().getBytes()).value());
+                Files.write(file, serializer.serialize(partitioned.record()));
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }

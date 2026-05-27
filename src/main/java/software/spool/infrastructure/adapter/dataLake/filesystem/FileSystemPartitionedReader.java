@@ -3,6 +3,9 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 import software.spool.core.exception.DeserializationException;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.serde.PayloadDeserializer;
+import software.spool.mounter.api.MountMode;
+import software.spool.mounter.api.model.GenericRecord;
+import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.api.port.PartitionedRecord;
 
@@ -16,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-public class FileSystemPartitionedReader<GenericRecord> implements PartitionedReader<GenericRecord> {
+public class FileSystemPartitionedReader implements PartitionedReader {
     private final Path basePath;
     private final PayloadDeserializer<GenericRecord> deserializer;
 
@@ -30,19 +33,18 @@ public class FileSystemPartitionedReader<GenericRecord> implements PartitionedRe
     }
 
     @Override
-    public List<PartitionedRecord<GenericRecord>> read(PartitionKey partitionKey) {
-        Map<String, String> constraints = parseConstraints(partitionKey);
-        if (!Files.exists(basePath)) {
-            return List.of();
-        }
-        try (Stream<Path> walk = Files.walk(basePath)) {
+    public List<PartitionedRecord<GenericRecord>> read(MountTarget mountTarget) {
+        Path searchPath = basePath.resolve(mountTarget.mode() == MountMode.TRANSFORMATION ? "bronze" : "silver");
+        Map<String, String> constraints = parseConstraints(mountTarget.sourceKey());
+        if (!Files.exists(searchPath)) return List.of();
+        try (Stream<Path> walk = Files.walk(searchPath)) {
             return walk
                     .filter(Files::isRegularFile)
-                    .filter(file -> matches(basePath.relativize(file), constraints))
-                    .flatMap(this::toRecord)
+                    .filter(file -> matches(searchPath.relativize(file), constraints))
+                    .flatMap(file -> toRecord(file, searchPath))
                     .toList();
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to walk base path: " + basePath, e);
+            throw new UncheckedIOException("Failed to walk path: " + searchPath, e);
         }
     }
 
@@ -61,11 +63,11 @@ public class FileSystemPartitionedReader<GenericRecord> implements PartitionedRe
         return true;
     }
 
-    private Stream<PartitionedRecord<GenericRecord>> toRecord(Path file) {
+    private Stream<PartitionedRecord<GenericRecord>> toRecord(Path file, Path searchPath) {
         try {
             byte[] bytes = Files.readAllBytes(file);
             GenericRecord record = deserializer.deserialize(bytes);
-            PartitionKey fileKey = resolveFileKey(file);
+            PartitionKey fileKey = resolveFileKey(file, searchPath);
             return Stream.of(new PartitionedRecord<>(fileKey, record));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read file: " + file, e);
@@ -74,8 +76,8 @@ public class FileSystemPartitionedReader<GenericRecord> implements PartitionedRe
         }
     }
 
-    private PartitionKey resolveFileKey(Path file) {
-        Path relative = basePath.relativize(file.getParent());
+    private PartitionKey resolveFileKey(Path file, Path searchPath) {
+        Path relative = searchPath.relativize(file.getParent());
         String[] segments = new String[relative.getNameCount()];
         for (int i = 0; i < relative.getNameCount(); i++) {
             segments[i] = relative.getName(i).toString();

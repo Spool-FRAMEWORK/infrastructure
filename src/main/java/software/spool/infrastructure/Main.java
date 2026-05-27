@@ -10,8 +10,5 @@ import java.util.List;
 
 public class Main {
     public static void main(String[] args) {
-        List<PartitionedRecord<GenericRecord>> list = PluginResolver.resolve(PartitionedReaderProvider.class, PluginConfiguration.builder().with("path", "D:/spool/datalake").build())
-                .read(new PartitionKey("year=2026::hour=17"));
-        System.out.println(list.getFirst().partitionKey());
     }
 }
