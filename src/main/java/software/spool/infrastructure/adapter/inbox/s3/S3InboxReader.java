@@ -109,12 +109,17 @@ public class S3InboxReader implements InboxReader{
     }
 
     private Envelope toEnvelope(EnvelopeDto dto) throws Exception {
-        EventMetadata metadata = PayloadDeserializerFactory.json()
+        EventMetadata eventMetadata = PayloadDeserializerFactory.json()
                 .as(EventMetadata.class)
                 .deserialize(dto.metadata());
 
+        byte[] dtoBytes = RecordSerializerFactory.record().serialize(dto);
+        com.fasterxml.jackson.databind.node.ObjectNode node =
+                (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(dtoBytes);
+        node.set("idempotencyKey", mapper.createObjectNode().put("value", dto.idempotencyKey()));
+        node.set("metadata", mapper.valueToTree(eventMetadata));
         return PayloadDeserializerFactory.json().as(Envelope.class)
-                .deserialize(RecordSerializerFactory.record().serialize(dto));
+                .deserialize(mapper.writeValueAsBytes(node));
     }
 
     record EnvelopeDto(

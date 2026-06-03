@@ -103,12 +103,17 @@ public class S3InboxUpdater implements InboxUpdater {
     private Envelope toEnvelope(EnvelopeDto dto,
                                 IdempotencyKey idempotencyKey,
                                 EnvelopeStatus newStatus) throws Exception {
-        EventMetadata metadata = PayloadDeserializerFactory.json()
+        EventMetadata eventMetadata = PayloadDeserializerFactory.json()
                 .as(EventMetadata.class)
                 .deserialize(dto.metadata());
 
+        byte[] dtoBytes = RecordSerializerFactory.record().serialize(dto);
+        com.fasterxml.jackson.databind.node.ObjectNode node =
+                (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(dtoBytes);
+        node.set("idempotencyKey", mapper.valueToTree(idempotencyKey));
+        node.set("metadata", mapper.valueToTree(eventMetadata));
         return PayloadDeserializerFactory.json().as(Envelope.class)
-                .deserialize(RecordSerializerFactory.record().serialize(dto)).withStatus(newStatus);
+                .deserialize(mapper.writeValueAsBytes(node)).withStatus(newStatus);
     }
 
     record EnvelopeDto(
