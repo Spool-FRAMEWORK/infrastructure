@@ -6,10 +6,10 @@ import software.spool.infrastructure.spi.provider.datamart.DataMartWriterProvide
 import software.spool.mounter.api.port.DataMartWriter;
 
 @SpoolPlugin(DataMartWriterProvider.class)
-public class FileSystemDataMartWriterProvider implements DataMartWriterProvider {
+public class RawFileSystemDataMartWriterProvider implements DataMartWriterProvider {
     @Override
     public String name() {
-        return "FILE_SYSTEM";
+        return "RAW_FILE_SYSTEM";
     }
 
     @Override
@@ -24,6 +24,6 @@ public class FileSystemDataMartWriterProvider implements DataMartWriterProvider 
 
     @Override
     public DataMartWriter create(PluginConfiguration configuration) {
-        return new FileSystemDataMartWriter(configuration.require("path"));
+        return new RawFileSystemDataMartWriter(configuration.require("path"));
     }
 }

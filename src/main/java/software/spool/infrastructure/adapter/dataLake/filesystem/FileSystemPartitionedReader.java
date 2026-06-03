@@ -1,5 +1,6 @@
 package software.spool.infrastructure.adapter.dataLake.filesystem;
 
+import software.spool.core.adapter.logging.LoggerFactory;
 import software.spool.core.exception.DeserializationException;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.serde.PayloadDeserializer;
@@ -38,25 +39,31 @@ public class FileSystemPartitionedReader implements PartitionedReader {
         Map<String, String> constraints = parseConstraints(mountTarget.sourceKey());
         if (!Files.exists(searchPath)) return List.of();
         try (Stream<Path> walk = Files.walk(searchPath)) {
-            return walk
+            LoggerFactory.getLogger("FileSystemPartitionedReader").info("Searching for " + searchPath + " in " + mountTarget.sourceKey().value());
+            List<PartitionedRecord<GenericRecord>> read = walk
                     .filter(Files::isRegularFile)
                     .filter(file -> matches(searchPath.relativize(file), constraints))
                     .flatMap(file -> toRecord(file, searchPath))
                     .toList();
+            LoggerFactory.getLogger("FileSystemPartitionedReader").info("Found " + read.size() + " records");
+            return read;
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to walk path: " + searchPath, e);
         }
     }
 
     private boolean matches(Path relativePath, Map<String, String> constraints) {
+        Map<String, String> segments = new HashMap<>();
         for (int i = 0; i < relativePath.getNameCount(); i++) {
             String segment = relativePath.getName(i).toString();
             int eq = segment.indexOf('=');
-            if (eq <= 0) continue;
-            String segmentKey = segment.substring(0, eq);
-            String segmentValue = segment.substring(eq + 1);
-            String constraint = constraints.get(segmentKey);
-            if (constraint != null && !constraint.equals(segmentValue)) {
+            if (eq > 0) {
+                segments.put(segment.substring(0, eq), segment.substring(eq + 1));
+            }
+        }
+        for (Map.Entry<String, String> constraint : constraints.entrySet()) {
+            String actual = segments.get(constraint.getKey());
+            if (!constraint.getValue().equals(actual)) {
                 return false;
             }
         }
@@ -72,7 +79,7 @@ public class FileSystemPartitionedReader implements PartitionedReader {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read file: " + file, e);
         } catch (DeserializationException e) {
-            throw new RuntimeException("Failed to deserialize file: " + file, e);
+            throw new RuntimeException("Failed to deserialize file: " + file + ". " + e.getMessage(), e);
         }
     }
 

@@ -7,7 +7,6 @@ import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
 @SpoolPlugin(EventBusProvider.class)
 public class InMemoryEventBusProvider implements EventBusProvider {
-
     @Override
     public String name() {
         return "IN_MEMORY";
