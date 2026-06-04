@@ -3,24 +3,31 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 import software.spool.core.adapter.logging.LoggerFactory;
 import software.spool.core.exception.DeserializationException;
 import software.spool.core.model.vo.PartitionKey;
+import software.spool.core.port.logging.Logger;
 import software.spool.core.port.serde.PayloadDeserializer;
 import software.spool.mounter.api.MountMode;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.api.port.PartitionedRecord;
+import software.spool.mounter.api.port.scaling.PartitionSlice;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class FileSystemPartitionedReader implements PartitionedReader {
+
+    private static final Logger log = LoggerFactory.getLogger("FileSystemPartitionedReader");
+
     private final Path basePath;
     private final PayloadDeserializer<GenericRecord> deserializer;
 
@@ -35,39 +42,80 @@ public class FileSystemPartitionedReader implements PartitionedReader {
 
     @Override
     public Stream<PartitionedRecord<GenericRecord>> read(MountTarget mountTarget) {
-        Path searchPath = basePath.resolve(mountTarget.mode() == MountMode.TRANSFORMATION ? "bronze" : "silver");
+        Path layerPath = basePath.resolve(mountTarget.mode() == MountMode.TRANSFORMATION ? "bronze" : "silver");
         Map<String, String> constraints = parseConstraints(mountTarget.sourceKey());
-        if (!Files.exists(searchPath)) return Stream.of();
-        try (Stream<Path> walk = Files.walk(searchPath)) {
-            LoggerFactory.getLogger("FileSystemPartitionedReader").info("Searching for " + searchPath + " in " + mountTarget.sourceKey().value());
-            List<PartitionedRecord<GenericRecord>> read = walk
+        ResolutionResult resolved = resolveConstrainedPath(layerPath, constraints);
+
+        log.info("Resolved search path: {} (pending constraints: {})", resolved.path(), resolved.pending());
+
+        if (!Files.exists(resolved.path())) {
+            log.warn("Path does not exist, returning empty: {}", resolved.path());
+            return Stream.of();
+        }
+
+        List<Path> files = collectFiles(resolved);
+        List<Path> slice = applySlice(files, mountTarget.slice());
+
+        log.info("Reading {} files (total in partition: {})", slice.size(), files.size());
+
+        int total = slice.size();
+        AtomicLong counter = new AtomicLong(0);
+        return slice.parallelStream()
+                .flatMap(file -> {
+                    long count = counter.incrementAndGet();
+                    if (count % 100 == 0) log.info("Streamed {}/{} files...", count, total);
+                    return toRecord(file, resolved.path());
+                })
+                .onClose(() -> log.info("Read complete — {} files streamed", counter.get()));
+    }
+
+    private List<Path> collectFiles(ResolutionResult resolved) {
+        try (Stream<Path> walk = Files.walk(resolved.path())) {
+            return walk
                     .filter(Files::isRegularFile)
-                    .filter(file -> matches(searchPath.relativize(file), constraints))
-                    .flatMap(file -> toRecord(file, searchPath))
-                    .toList();
-            LoggerFactory.getLogger("FileSystemPartitionedReader").info("Found " + read.size() + " records");
-            return read.stream();
+                    .filter(file -> matchesPendingConstraints(file, resolved.pending()))
+                    .sorted()
+                    .collect(Collectors.toList());
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to walk path: " + searchPath, e);
+            log.error("Failed to walk path: {}", resolved.path(), e);
+            throw new UncheckedIOException("Failed to walk path: " + resolved.path(), e);
         }
     }
 
-    private boolean matches(Path relativePath, Map<String, String> constraints) {
-        Map<String, String> segments = new HashMap<>();
-        for (int i = 0; i < relativePath.getNameCount(); i++) {
-            String segment = relativePath.getName(i).toString();
-            int eq = segment.indexOf('=');
-            if (eq > 0) {
-                segments.put(segment.substring(0, eq), segment.substring(eq + 1));
+    private List<Path> applySlice(List<Path> files, PartitionSlice slice) {
+        if (slice == null) return files;
+        int from = (int) slice.offset();
+        int to = (int) Math.min(slice.offset() + slice.limit(), files.size());
+        return files.subList(from, to);
+    }
+
+    record ResolutionResult(Path path, Map<String, String> pending) {}
+
+    static ResolutionResult resolveConstrainedPath(Path base, Map<String, String> constraints) {
+        Path resolved = base;
+        Map<String, String> pending = new LinkedHashMap<>();
+        boolean skipping = false;
+        for (Map.Entry<String, String> entry : constraints.entrySet()) {
+            if (!skipping) {
+                Path candidate = resolved.resolve(entry.getKey() + "=" + entry.getValue());
+                if (Files.isDirectory(candidate)) {
+                    resolved = candidate;
+                } else {
+                    skipping = true;
+                    pending.put(entry.getKey(), entry.getValue());
+                }
+            } else {
+                pending.put(entry.getKey(), entry.getValue());
             }
         }
-        for (Map.Entry<String, String> constraint : constraints.entrySet()) {
-            String actual = segments.get(constraint.getKey());
-            if (!constraint.getValue().equals(actual)) {
-                return false;
-            }
-        }
-        return true;
+        return new ResolutionResult(resolved, pending);
+    }
+
+    static boolean matchesPendingConstraints(Path file, Map<String, String> pending) {
+        if (pending.isEmpty()) return true;
+        String normalised = file.toString().replace('\\', '/');
+        return pending.entrySet().stream()
+                .allMatch(e -> normalised.contains("/" + e.getKey() + "=" + e.getValue() + "/"));
     }
 
     private Stream<PartitionedRecord<GenericRecord>> toRecord(Path file, Path searchPath) {
@@ -77,8 +125,10 @@ public class FileSystemPartitionedReader implements PartitionedReader {
             PartitionKey fileKey = resolveFileKey(file, searchPath);
             return Stream.of(new PartitionedRecord<>(fileKey, record));
         } catch (IOException e) {
+            log.error("Failed to read file: {}", file, e);
             throw new UncheckedIOException("Failed to read file: " + file, e);
         } catch (DeserializationException e) {
+            log.error("Failed to deserialize file: {} — {}", file, e.getMessage(), e);
             throw new RuntimeException("Failed to deserialize file: " + file + ". " + e.getMessage(), e);
         }
     }
@@ -92,8 +142,8 @@ public class FileSystemPartitionedReader implements PartitionedReader {
         return new PartitionKey(String.join("::", segments));
     }
 
-    private static Map<String, String> parseConstraints(PartitionKey partitionKey) {
-        Map<String, String> constraints = new HashMap<>();
+    static Map<String, String> parseConstraints(PartitionKey partitionKey) {
+        Map<String, String> constraints = new LinkedHashMap<>();
         for (String segment : partitionKey.value().split("::")) {
             int eq = segment.indexOf('=');
             if (eq > 0) {
