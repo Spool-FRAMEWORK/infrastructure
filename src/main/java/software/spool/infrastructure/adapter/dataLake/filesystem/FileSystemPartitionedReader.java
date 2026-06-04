@@ -34,10 +34,10 @@ public class FileSystemPartitionedReader implements PartitionedReader {
     }
 
     @Override
-    public List<PartitionedRecord<GenericRecord>> read(MountTarget mountTarget) {
+    public Stream<PartitionedRecord<GenericRecord>> read(MountTarget mountTarget) {
         Path searchPath = basePath.resolve(mountTarget.mode() == MountMode.TRANSFORMATION ? "bronze" : "silver");
         Map<String, String> constraints = parseConstraints(mountTarget.sourceKey());
-        if (!Files.exists(searchPath)) return List.of();
+        if (!Files.exists(searchPath)) return Stream.of();
         try (Stream<Path> walk = Files.walk(searchPath)) {
             LoggerFactory.getLogger("FileSystemPartitionedReader").info("Searching for " + searchPath + " in " + mountTarget.sourceKey().value());
             List<PartitionedRecord<GenericRecord>> read = walk
@@ -46,7 +46,7 @@ public class FileSystemPartitionedReader implements PartitionedReader {
                     .flatMap(file -> toRecord(file, searchPath))
                     .toList();
             LoggerFactory.getLogger("FileSystemPartitionedReader").info("Found " + read.size() + " records");
-            return read;
+            return read.stream();
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to walk path: " + searchPath, e);
         }
