@@ -34,8 +34,9 @@ public class FileSystemDataMartWriter implements DataMartWriter {
             Path dir = basePath.resolve(target.qualifiedDataMart()).resolve(partitionPath);
             try {
                 Files.createDirectories(dir);
-                Path file = dir.resolve(IdempotencyKey.of(target.dataMart(), partitioned.record().toString().getBytes()).value() + "." + target.resolveExtension((byte[]) partitioned.record()));
-                Files.write(file, serializer.serialize(partitioned.record()));
+                byte[] serialized = serializer.serialize(partitioned.record());
+                Path file = dir.resolve(IdempotencyKey.of(target.dataMart(), serialized).value() + "." + target.resolveExtension(serialized));
+                Files.write(file, serialized);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
