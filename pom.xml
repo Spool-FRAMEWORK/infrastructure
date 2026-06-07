@@ -48,9 +48,12 @@
     </repositories>
 
     <distributionManagement>
+        <repository>
+            <id>central</id>
+            <url>https://central.sonatype.com/api/v1/publisher</url>
+        </repository>
         <snapshotRepository>
             <id>github</id>
-            <name>Spool-FRAMEWORK GitHub Packages</name>
             <url>https://maven.pkg.github.com/Spool-FRAMEWORK/infrastructure</url>
         </snapshotRepository>
     </distributionManagement>
