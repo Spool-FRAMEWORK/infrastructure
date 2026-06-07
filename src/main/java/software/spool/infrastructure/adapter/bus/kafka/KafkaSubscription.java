@@ -42,7 +42,7 @@ public class KafkaSubscription<E extends Event> implements Subscription {
                     try {
                         E payload = PayloadDeserializerFactory.json()
                                 .as(eventType)
-                                .deserialize(new String(record.value(), StandardCharsets.UTF_8));
+                                .deserialize(record.value());
                         handler.handle(payload);
                     } catch (Exception e) {
                         System.err.println(

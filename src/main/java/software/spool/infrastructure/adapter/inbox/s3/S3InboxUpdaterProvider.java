@@ -9,7 +9,7 @@ import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.spool.core.port.inbox.InboxUpdater;
 import software.spool.infrastructure.spi.SpoolPlugin;
-import software.spool.infrastructure.spi.provider.InboxUpdaterProvider;
+import software.spool.infrastructure.spi.provider.inbox.InboxUpdaterProvider;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
 import java.net.URI;

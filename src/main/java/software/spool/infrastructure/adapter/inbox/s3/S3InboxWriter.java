@@ -37,11 +37,9 @@ public class S3InboxWriter implements InboxWriter {
         }
 
         try {
-            String metadataSerialized = RecordSerializerFactory.record().serialize(envelope.metadata());
-
             EnvelopeDto dto = new EnvelopeDto(
                     envelope.idempotencyKey().value(),
-                    metadataSerialized,
+                    RecordSerializerFactory.record().serialize(envelope.metadata()),
                     envelope.payload(),
                     envelope.status().name(),
                     envelope.retries(),
@@ -85,8 +83,8 @@ public class S3InboxWriter implements InboxWriter {
 
     record EnvelopeDto(
             String idempotencyKey,
-            String metadata,
-            String payload,
+            byte[] metadata,
+            byte[] payload,
             String status,
             int retries,
             Instant capturedAt

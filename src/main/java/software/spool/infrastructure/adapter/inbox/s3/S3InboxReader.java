@@ -6,6 +6,7 @@ import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.InboxReadException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
@@ -108,24 +109,23 @@ public class S3InboxReader implements InboxReader{
     }
 
     private Envelope toEnvelope(EnvelopeDto dto) throws Exception {
-        EventMetadata metadata = PayloadDeserializerFactory.json()
+        EventMetadata eventMetadata = PayloadDeserializerFactory.json()
                 .as(EventMetadata.class)
                 .deserialize(dto.metadata());
 
-        return new Envelope(
-                new IdempotencyKey(dto.idempotencyKey()),
-                metadata,
-                dto.payload(),
-                EnvelopeStatus.valueOf(dto.status()),
-                dto.retries(),
-                dto.capturedAt()
-        );
+        byte[] dtoBytes = RecordSerializerFactory.record().serialize(dto);
+        com.fasterxml.jackson.databind.node.ObjectNode node =
+                (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(dtoBytes);
+        node.set("idempotencyKey", mapper.createObjectNode().put("value", dto.idempotencyKey()));
+        node.set("metadata", mapper.valueToTree(eventMetadata));
+        return PayloadDeserializerFactory.json().as(Envelope.class)
+                .deserialize(mapper.writeValueAsBytes(node));
     }
 
     record EnvelopeDto(
             String idempotencyKey,
-            String metadata,
-            String payload,
+            byte[] metadata,
+            byte[] payload,
             String status,
             int retries,
             Instant capturedAt

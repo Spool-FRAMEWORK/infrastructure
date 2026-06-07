@@ -2,15 +2,14 @@ package software.spool.infrastructure.adapter.bus.memory;
 
 import software.spool.core.port.bus.EventBus;
 import software.spool.infrastructure.spi.SpoolPlugin;
-import software.spool.infrastructure.spi.provider.EventBusProvider;
+import software.spool.infrastructure.spi.provider.bus.EventBusProvider;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
 @SpoolPlugin(EventBusProvider.class)
 public class InMemoryEventBusProvider implements EventBusProvider {
-
     @Override
     public String name() {
-        return "MEMORY";
+        return "IN_MEMORY";
     }
 
     @Override
@@ -25,6 +24,6 @@ public class InMemoryEventBusProvider implements EventBusProvider {
 
     @Override
     public EventBus create(PluginConfiguration configuration) {
-        return new InMemoryEventBus();
+        return InMemoryEventBus.instance();
     }
 }
