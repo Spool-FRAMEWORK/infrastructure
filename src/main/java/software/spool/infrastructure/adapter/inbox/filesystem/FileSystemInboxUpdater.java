@@ -1,12 +1,14 @@
 package software.spool.infrastructure.adapter.inbox.filesystem;
 
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.InboxUpdateException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxUpdater;
 import software.spool.core.port.serde.PayloadDeserializer;
+import software.spool.core.port.serde.RecordSerializer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,9 +21,21 @@ import java.util.List;
 public class FileSystemInboxUpdater implements InboxUpdater {
     private final String path;
     private final PayloadDeserializer<Envelope> deserializer = PayloadDeserializerFactory.json().as(Envelope.class);
+    private final RecordSerializer<Envelope> serializer = RecordSerializerFactory.record();
 
     public FileSystemInboxUpdater(String path) {
         this.path = path;
+    }
+
+    @Override
+    public Envelope update(Envelope envelope) throws InboxUpdateException {
+        Path filePath = Path.of(path, envelope.status().name(), envelope.idempotencyKey().value() + ".json");
+        try {
+            Files.write(filePath, serializer.serialize(envelope));
+            return envelope;
+        } catch (IOException e) {
+            throw new InboxUpdateException(List.of(envelope.idempotencyKey()), e.getMessage());
+        }
     }
 
     @Override
