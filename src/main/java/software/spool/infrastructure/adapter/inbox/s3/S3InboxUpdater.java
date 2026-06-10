@@ -3,6 +3,7 @@ package software.spool.infrastructure.adapter.inbox.s3;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
@@ -31,6 +32,34 @@ public class S3InboxUpdater implements InboxUpdater {
         this.s3Client   = s3Client;
         this.bucketName = bucketName;
         this.mapper     = new ObjectMapper().registerModule(new JavaTimeModule());
+    }
+
+    @Override
+    public Envelope update(Envelope envelope) throws InboxUpdateException {
+        try {
+            String key = INBOX_PREFIX + envelope.status().name() + "/" + envelope.idempotencyKey().value();
+            EnvelopeDto dto = new EnvelopeDto(
+                    envelope.idempotencyKey().value(),
+                    RecordSerializerFactory.record().serialize(envelope.metadata()),
+                    envelope.payload(),
+                    envelope.status().name(),
+                    envelope.retries(),
+                    envelope.capturedAt(),
+                    envelope.updatedAt()
+            );
+            byte[] body = mapper.writeValueAsBytes(dto);
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucketName)
+                            .key(key)
+                            .contentType("application/json")
+                            .build(),
+                    RequestBody.fromBytes(body)
+            );
+            return envelope;
+        } catch (Exception e) {
+            throw new InboxUpdateException(envelope.idempotencyKey(), e.getMessage(), e);
+        }
     }
 
     @Override
@@ -122,6 +151,7 @@ public class S3InboxUpdater implements InboxUpdater {
             byte[] payload,
             String status,
             int retries,
-            Instant capturedAt
+            Instant capturedAt,
+            Instant updatedAt
     ) {}
 }
