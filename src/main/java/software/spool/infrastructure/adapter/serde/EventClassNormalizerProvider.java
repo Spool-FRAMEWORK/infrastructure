@@ -6,10 +6,7 @@ import software.spool.core.pipeline.Pipeline;
 import software.spool.core.port.serde.EnrichmentRule;
 import software.spool.crawler.internal.utils.factory.Normalizer;
 import software.spool.crawler.internal.utils.factory.PayloadSplitterFactory;
-import software.spool.crawler.internal.utils.factory.steps.LocateStep;
-import software.spool.crawler.internal.utils.factory.steps.MapStep;
-import software.spool.crawler.internal.utils.factory.steps.SerializeStep;
-import software.spool.crawler.internal.utils.factory.steps.SplitEnrichStep;
+import software.spool.crawler.internal.utils.factory.steps.*;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.infrastructure.spi.provider.serde.NormalizerProvider;
@@ -40,8 +37,9 @@ public class EventClassNormalizerProvider implements NormalizerProvider {
 
         return new Normalizer<>(Pipeline.<Object>start()
                 .add(new ObservedStep<>("map-to-json", new MapStep<>(PayloadMapperFactory.jsonNode())))
-                .add(new ObservedStep<>("locate", new LocateStep<>(PayloadLocatorFactory.fromRootPath(rootPath))))
-                .add(new ObservedStep<>("split-enrich", new SplitEnrichStep<>(PayloadSplitterFactory.single(), PayloadExtractorFactory.withRules(rules), RecordEnricherFactory.json())))
+                .add(new ObservedStep<>("extract", new ExtractStep<>(PayloadExtractorFactory.withRules(rules))))
+                .add(new ObservedStep<>("context-locate", new ContextLocateStep<>(PayloadLocatorFactory.fromRootPath(rootPath))))
+                .add(new ObservedStep<>("split-enrich", new SplitEnrichStep<>(PayloadSplitterFactory.jsonArray(), RecordEnricherFactory.json())))
                 .add(new ObservedStep<>("serialize", new SerializeStep<>(RecordSerializerFactory.jsonNode()))));
     }
 

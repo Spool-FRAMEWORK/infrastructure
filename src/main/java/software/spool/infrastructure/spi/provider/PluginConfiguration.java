@@ -61,7 +61,7 @@ public final class PluginConfiguration {
             return this;
         }
 
-        public Builder with(String key, Object value) {   // ← nuevo
+        public Builder with(String key, Object value) {
             context.put(key, value);
             return this;
         }
