@@ -1,5 +1,6 @@
 package software.spool.infrastructure.adapter.datamart;
 
+import software.spool.infrastructure.adapter.concurrency.ConcurrencyConfiguration;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.infrastructure.spi.provider.datamart.DataMartWriterProvider;
@@ -24,6 +25,6 @@ public class FileSystemDataMartWriterProvider implements DataMartWriterProvider 
 
     @Override
     public DataMartWriter create(PluginConfiguration configuration) {
-        return new FileSystemDataMartWriter(configuration.require("path"));
+        return new FileSystemDataMartWriter(configuration.require("path"), ConcurrencyConfiguration.from(configuration));
     }
 }
