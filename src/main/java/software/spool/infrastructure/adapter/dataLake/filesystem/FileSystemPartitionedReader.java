@@ -11,6 +11,7 @@ import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedReader;
 import software.spool.mounter.api.port.PartitionedRecord;
 import software.spool.mounter.api.port.scaling.PartitionSlice;
+import software.spool.mounter.api.utils.BoundedConcurrency;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -24,20 +25,52 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Reads the records of a partition from the file system, several files at a time.
+ *
+ * <p>The files are read on the threads of a {@link BoundedConcurrency}, not on the common pool of the JVM. The
+ * stream it returns is sequential and in the order of the files, so the aggregator that consumes it sees exactly
+ * what a single-threaded read would give it.</p>
+ */
 public class FileSystemPartitionedReader implements PartitionedReader {
 
     private static final Logger log = LoggerFactory.getLogger("FileSystemPartitionedReader");
 
     private final Path basePath;
     private final PayloadDeserializer<GenericRecord> deserializer;
+    private final BoundedConcurrency concurrency;
 
+    /**
+     * Creates a reader that owns a pool with one thread per available processor.
+     *
+     * @param basePath     the root of the data lake
+     * @param deserializer turns the bytes of a file into a record
+     */
     public FileSystemPartitionedReader(Path basePath, PayloadDeserializer<GenericRecord> deserializer) {
+        this(basePath, deserializer, BoundedConcurrency.withThreads(Runtime.getRuntime().availableProcessors()));
+    }
+
+    /**
+     * Creates a reader that reads on the given concurrency, which the caller closes.
+     *
+     * @param basePath     the root of the data lake
+     * @param deserializer turns the bytes of a file into a record
+     * @param concurrency  the pool and window the files are read with
+     */
+    public FileSystemPartitionedReader(Path basePath, PayloadDeserializer<GenericRecord> deserializer,
+                                       BoundedConcurrency concurrency) {
         this.basePath = basePath;
         this.deserializer = deserializer;
+        this.concurrency = concurrency;
     }
 
     public FileSystemPartitionedReader(String basePath, PayloadDeserializer<GenericRecord> deserializer) {
         this(Paths.get(basePath), deserializer);
+    }
+
+    public FileSystemPartitionedReader(String basePath, PayloadDeserializer<GenericRecord> deserializer,
+                                       BoundedConcurrency concurrency) {
+        this(Paths.get(basePath), deserializer, concurrency);
     }
 
     @Override
@@ -60,8 +93,7 @@ public class FileSystemPartitionedReader implements PartitionedReader {
 
         int total = slice.size();
         AtomicLong counter = new AtomicLong(0);
-        return slice.parallelStream()
-                .flatMap(file -> {
+        return concurrency.map(slice, file -> {
                     long count = counter.incrementAndGet();
                     if (count % 100 == 0) log.info("Streamed {}/{} files...", count, total);
                     return toRecord(file, resolved.path());
@@ -118,12 +150,12 @@ public class FileSystemPartitionedReader implements PartitionedReader {
                 .allMatch(e -> normalised.contains("/" + e.getKey() + "=" + e.getValue() + "/"));
     }
 
-    private Stream<PartitionedRecord<GenericRecord>> toRecord(Path file, Path searchPath) {
+    private PartitionedRecord<GenericRecord> toRecord(Path file, Path searchPath) {
         try {
             byte[] bytes = Files.readAllBytes(file);
             GenericRecord record = deserializer.deserialize(bytes);
             PartitionKey fileKey = resolveFileKey(file, searchPath);
-            return Stream.of(new PartitionedRecord<>(fileKey, record));
+            return new PartitionedRecord<>(fileKey, record);
         } catch (IOException e) {
             log.error("Failed to read file: {}", file, e);
             throw new UncheckedIOException("Failed to read file: " + file, e);

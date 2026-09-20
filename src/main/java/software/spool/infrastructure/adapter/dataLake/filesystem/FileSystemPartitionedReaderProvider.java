@@ -2,6 +2,7 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.port.serde.PayloadDeserializer;
+import software.spool.infrastructure.adapter.concurrency.ConcurrencyConfiguration;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.infrastructure.spi.provider.dataLake.PartitionedReaderProvider;
@@ -32,7 +33,8 @@ public class FileSystemPartitionedReaderProvider implements PartitionedReaderPro
     public PartitionedReader create(PluginConfiguration configuration) {
         return new FileSystemPartitionedReader(
                 configuration.require("path"),
-                buildDeserializer()
+                buildDeserializer(),
+                ConcurrencyConfiguration.from(configuration)
         );
     }
 
