@@ -8,6 +8,7 @@ import software.amazon.awssdk.services.s3.model.*;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.DuplicateEventException;
 import software.spool.core.exception.InboxWriteException;
+import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.crawler.api.port.InboxWriter;
@@ -32,7 +33,7 @@ public class S3InboxWriter implements InboxWriter {
     public IdempotencyKey receive(Envelope envelope) throws InboxWriteException, DuplicateEventException {
         String objectKey = INBOX_PREFIX + envelope.status().name() + "/" + envelope.idempotencyKey().value();
 
-        if (objectExists(objectKey)) {
+        if (existsInAnyStatus(envelope.idempotencyKey())) {
             throw new DuplicateEventException(envelope.idempotencyKey());
         }
 
@@ -66,6 +67,13 @@ public class S3InboxWriter implements InboxWriter {
         } catch (Exception e) {
             throw new InboxWriteException("Failed to serialize envelope: " + e.getMessage(), e);
         }
+    }
+
+    private boolean existsInAnyStatus(IdempotencyKey idempotencyKey) {
+        for (EnvelopeStatus status : EnvelopeStatus.values()) {
+            if (objectExists(INBOX_PREFIX + status.name() + "/" + idempotencyKey.value())) return true;
+        }
+        return false;
     }
 
     private boolean objectExists(String key) {
