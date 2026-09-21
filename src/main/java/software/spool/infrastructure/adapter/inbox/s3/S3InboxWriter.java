@@ -13,8 +13,6 @@ import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.crawler.api.port.InboxWriter;
 
-import java.time.Instant;
-
 public class S3InboxWriter implements InboxWriter {
 
     private static final String INBOX_PREFIX = "inbox/";
@@ -38,13 +36,14 @@ public class S3InboxWriter implements InboxWriter {
         }
 
         try {
-            EnvelopeDto dto = new EnvelopeDto(
+            S3EnvelopeDto dto = new S3EnvelopeDto(
                     envelope.idempotencyKey().value(),
                     RecordSerializerFactory.record().serialize(envelope.metadata()),
                     envelope.payload(),
                     envelope.status().name(),
                     envelope.retries(),
-                    envelope.capturedAt()
+                    envelope.capturedAt(),
+                    envelope.updatedAt()
             );
 
             byte[] body = mapper.writeValueAsBytes(dto);
@@ -88,13 +87,4 @@ public class S3InboxWriter implements InboxWriter {
             return false;
         }
     }
-
-    record EnvelopeDto(
-            String idempotencyKey,
-            byte[] metadata,
-            byte[] payload,
-            String status,
-            int retries,
-            Instant capturedAt
-    ) {}
 }

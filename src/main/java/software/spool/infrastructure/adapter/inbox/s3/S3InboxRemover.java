@@ -13,7 +13,6 @@ import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxEnvelopeRemover;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -52,7 +51,7 @@ public class S3InboxRemover implements InboxEnvelopeRemover {
                             .key(s3Key)
                             .build()
             );
-            EnvelopeDto dto = mapper.readValue(raw.asByteArray(), EnvelopeDto.class);
+            S3EnvelopeDto dto = mapper.readValue(raw.asByteArray(), S3EnvelopeDto.class);
 
             s3Client.deleteObject(DeleteObjectRequest.builder()
                     .bucket(bucketName)
@@ -84,7 +83,7 @@ public class S3InboxRemover implements InboxEnvelopeRemover {
         return null;
     }
 
-    private Envelope toEnvelope(EnvelopeDto dto) throws Exception {
+    private Envelope toEnvelope(S3EnvelopeDto dto) throws Exception {
         EventMetadata eventMetadata = PayloadDeserializerFactory.json()
                 .as(EventMetadata.class)
                 .deserialize(dto.metadata());
@@ -97,13 +96,4 @@ public class S3InboxRemover implements InboxEnvelopeRemover {
         return PayloadDeserializerFactory.json().as(Envelope.class)
                 .deserialize(mapper.writeValueAsBytes(node));
     }
-
-    record EnvelopeDto(
-            String idempotencyKey,
-            byte[] metadata,
-            byte[] payload,
-            String status,
-            int retries,
-            Instant capturedAt
-    ) {}
 }

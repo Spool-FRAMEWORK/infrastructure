@@ -15,7 +15,6 @@ import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxUpdater;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -38,7 +37,7 @@ public class S3InboxUpdater implements InboxUpdater {
     public Envelope update(Envelope envelope) throws InboxUpdateException {
         try {
             String key = INBOX_PREFIX + envelope.status().name() + "/" + envelope.idempotencyKey().value();
-            EnvelopeDto dto = new EnvelopeDto(
+            S3EnvelopeDto dto = new S3EnvelopeDto(
                     envelope.idempotencyKey().value(),
                     RecordSerializerFactory.record().serialize(envelope.metadata()),
                     envelope.payload(),
@@ -92,7 +91,7 @@ public class S3InboxUpdater implements InboxUpdater {
                             .key(sourceKey)
                             .build()
             );
-            EnvelopeDto dto = mapper.readValue(raw.asByteArray(), EnvelopeDto.class);
+            S3EnvelopeDto dto = mapper.readValue(raw.asByteArray(), S3EnvelopeDto.class);
 
             s3Client.copyObject(CopyObjectRequest.builder()
                     .sourceBucket(bucketName).sourceKey(sourceKey)
@@ -129,7 +128,7 @@ public class S3InboxUpdater implements InboxUpdater {
         return null;
     }
 
-    private Envelope toEnvelope(EnvelopeDto dto,
+    private Envelope toEnvelope(S3EnvelopeDto dto,
                                 IdempotencyKey idempotencyKey,
                                 EnvelopeStatus newStatus) throws Exception {
         EventMetadata eventMetadata = PayloadDeserializerFactory.json()
@@ -144,14 +143,4 @@ public class S3InboxUpdater implements InboxUpdater {
         return PayloadDeserializerFactory.json().as(Envelope.class)
                 .deserialize(mapper.writeValueAsBytes(node)).withStatus(newStatus);
     }
-
-    record EnvelopeDto(
-            String idempotencyKey,
-            byte[] metadata,
-            byte[] payload,
-            String status,
-            int retries,
-            Instant capturedAt,
-            Instant updatedAt
-    ) {}
 }

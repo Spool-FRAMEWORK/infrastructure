@@ -14,7 +14,6 @@ import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxReader;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -45,8 +44,8 @@ public class S3InboxReader implements InboxReader{
 
             List<Envelope> envelopes = new ArrayList<>();
             for (S3Object s3Obj : listing.contents()) {
-                EnvelopeDto dto = fetchDto(s3Obj.key());
-                envelopes.add(toEnvelope(dto));
+                S3EnvelopeDto dto = fetchDto(s3Obj.key());
+                envelopes.add(toEnvelope(dto, status));
             }
             return envelopes;
 
@@ -75,8 +74,8 @@ public class S3InboxReader implements InboxReader{
                         .findFirst();
 
                 if (match.isPresent()) {
-                    EnvelopeDto dto = fetchDto(match.get().key());
-                    return Optional.of(toEnvelope(dto));
+                    S3EnvelopeDto dto = fetchDto(match.get().key());
+                    return Optional.of(toEnvelope(dto, status));
                 }
             }
             return Optional.empty();
@@ -98,17 +97,17 @@ public class S3InboxReader implements InboxReader{
         return result;
     }
 
-    private EnvelopeDto fetchDto(String s3Key) throws Exception {
+    private S3EnvelopeDto fetchDto(String s3Key) throws Exception {
         ResponseBytes<GetObjectResponse> raw = s3Client.getObjectAsBytes(
                 GetObjectRequest.builder()
                         .bucket(bucketName)
                         .key(s3Key)
                         .build()
         );
-        return mapper.readValue(raw.asByteArray(), EnvelopeDto.class);
+        return mapper.readValue(raw.asByteArray(), S3EnvelopeDto.class);
     }
 
-    private Envelope toEnvelope(EnvelopeDto dto) throws Exception {
+    private Envelope toEnvelope(S3EnvelopeDto dto, EnvelopeStatus status) throws Exception {
         EventMetadata eventMetadata = PayloadDeserializerFactory.json()
                 .as(EventMetadata.class)
                 .deserialize(dto.metadata());
@@ -118,16 +117,8 @@ public class S3InboxReader implements InboxReader{
                 (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(dtoBytes);
         node.set("idempotencyKey", mapper.createObjectNode().put("value", dto.idempotencyKey()));
         node.set("metadata", mapper.valueToTree(eventMetadata));
+        node.put("status", status.name());
         return PayloadDeserializerFactory.json().as(Envelope.class)
                 .deserialize(mapper.writeValueAsBytes(node));
     }
-
-    record EnvelopeDto(
-            String idempotencyKey,
-            byte[] metadata,
-            byte[] payload,
-            String status,
-            int retries,
-            Instant capturedAt
-    ) {}
 }
