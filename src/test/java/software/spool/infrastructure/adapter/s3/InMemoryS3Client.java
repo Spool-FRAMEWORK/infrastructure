@@ -11,12 +11,16 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,6 +74,16 @@ public final class InMemoryS3Client implements S3Client {
     public CopyObjectResponse copyObject(CopyObjectRequest request) {
         objects.put(request.destinationKey(), objects.get(request.sourceKey()));
         return CopyObjectResponse.builder().build();
+    }
+
+    @Override
+    public ListObjectsV2Response listObjectsV2(ListObjectsV2Request request) {
+        List<S3Object> contents = objects.keySet().stream()
+                .filter(key -> key.startsWith(request.prefix()))
+                .sorted()
+                .map(key -> S3Object.builder().key(key).build())
+                .toList();
+        return ListObjectsV2Response.builder().contents(contents).build();
     }
 
     @Override
