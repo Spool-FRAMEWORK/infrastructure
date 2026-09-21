@@ -32,7 +32,12 @@ public final class PluginResolver {
 
     private static <T extends Plugin<R>, R> void ensureLoaded(Class<T> type) {
         if (LOADED.add(type)) {
-            SCANNER.scan(type);
+            try {
+                SCANNER.scan(type);
+            } catch (RuntimeException exception) {
+                LOADED.remove(type);
+                throw exception;
+            }
         }
     }
 }

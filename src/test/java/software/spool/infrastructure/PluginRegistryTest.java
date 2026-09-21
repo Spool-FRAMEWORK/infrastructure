@@ -1,6 +1,7 @@
 package software.spool.infrastructure;
 
 import org.junit.jupiter.api.Test;
+import software.spool.infrastructure.fixture.StubPlugin;
 import software.spool.infrastructure.spi.Plugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
@@ -8,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PluginRegistryTest {
 
@@ -74,14 +76,54 @@ class PluginRegistryTest {
     }
 
     @Test
-    void register_sameNameTwice_secondRegistrationOverwrites() {
-        Plugin<?> first = plugin("KAPPA");
-        Plugin<?> second = plugin("KAPPA");
+    void register_sameNameLowerPriorityNumber_replacesTheRegistered() {
+        PluginRegistry.register(SharedPort.class, new FirstProvider("REPLACED", 10));
+        SecondProvider custom = new SecondProvider("REPLACED", 5);
 
-        register(first);
-        register(second);
+        PluginRegistry.register(SharedPort.class, custom);
 
-        assertThat(find(first, "KAPPA")).contains(second);
+        assertThat(PluginRegistry.find(SharedPort.class, "REPLACED")).contains(custom);
+    }
+
+    @Test
+    void register_sameNameHigherPriorityNumber_keepsTheRegistered() {
+        SecondProvider custom = new SecondProvider("KEPT", 5);
+        PluginRegistry.register(SharedPort.class, custom);
+
+        PluginRegistry.register(SharedPort.class, new FirstProvider("KEPT", 10));
+
+        assertThat(PluginRegistry.find(SharedPort.class, "KEPT")).contains(custom);
+    }
+
+    @Test
+    void register_sameNameAndPriority_throwsNamingBothClassesAndKeepsTheFirst() {
+        FirstProvider first = new FirstProvider("TIED", 10);
+        PluginRegistry.register(SharedPort.class, first);
+
+        assertThatThrownBy(() -> PluginRegistry.register(SharedPort.class, new SecondProvider("TIED", 10)))
+                .isInstanceOf(PluginConflictException.class)
+                .hasMessageContaining("TIED")
+                .hasMessageContaining("FirstProvider")
+                .hasMessageContaining("SecondProvider");
+        assertThat(PluginRegistry.find(SharedPort.class, "TIED")).contains(first);
+    }
+
+    @Test
+    void register_theSameClassTwice_isIdempotent() {
+        FirstProvider first = new FirstProvider("REPEATED", 10);
+        PluginRegistry.register(SharedPort.class, first);
+
+        PluginRegistry.register(SharedPort.class, new FirstProvider("REPEATED", 10));
+
+        assertThat(PluginRegistry.find(SharedPort.class, "REPEATED")).contains(first);
+    }
+
+    @Test
+    void register_namesThatDifferOnlyInCase_clash() {
+        PluginRegistry.register(SharedPort.class, new FirstProvider("Mixed", 10));
+
+        assertThatThrownBy(() -> PluginRegistry.register(SharedPort.class, new SecondProvider("MIXED", 10)))
+                .isInstanceOf(PluginConflictException.class);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -111,6 +153,20 @@ class PluginRegistryTest {
             @Override public boolean supports(PluginConfiguration c) { return true; }
             @Override public Object create(PluginConfiguration c) { return name; }
         };
+    }
+
+    private interface SharedPort extends Plugin<String> {}
+
+    private static final class FirstProvider extends StubPlugin<String> implements SharedPort {
+        FirstProvider(String name, int priority) {
+            super(name, priority, true, "first");
+        }
+    }
+
+    private static final class SecondProvider extends StubPlugin<String> implements SharedPort {
+        SecondProvider(String name, int priority) {
+            super(name, priority, true, "second");
+        }
     }
 
     private interface NeverRegistered {}
