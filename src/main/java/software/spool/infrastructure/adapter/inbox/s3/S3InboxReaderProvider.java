@@ -1,6 +1,7 @@
 package software.spool.infrastructure.adapter.inbox.s3;
 
 import software.spool.core.port.inbox.InboxReader;
+import software.spool.infrastructure.adapter.concurrency.ConcurrencyConfiguration;
 import software.spool.infrastructure.adapter.s3.S3ClientFactory;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.inbox.InboxReaderProvider;
@@ -29,6 +30,7 @@ public class S3InboxReaderProvider implements InboxReaderProvider {
     public InboxReader create(PluginConfiguration configuration) {
         return new S3InboxReader(
                 S3ClientFactory.create(configuration),
-                configuration.require("bucket"));
+                configuration.require("bucket"),
+                ConcurrencyConfiguration.from(configuration));
     }
 }

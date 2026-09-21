@@ -13,46 +13,77 @@ import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxReader;
+import software.spool.mounter.api.utils.BoundedConcurrency;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public class S3InboxReader implements InboxReader{
     private static final String INBOX_PREFIX = "inbox/";
     private final S3Client s3Client;
     private final String bucketName;
     private final ObjectMapper mapper;
+    private final BoundedConcurrency concurrency;
 
     public S3InboxReader(S3Client s3Client, String bucketName) {
+        this(s3Client, bucketName, BoundedConcurrency.withThreads(Runtime.getRuntime().availableProcessors()));
+    }
+
+    public S3InboxReader(S3Client s3Client, String bucketName, BoundedConcurrency concurrency) {
         this.s3Client   = s3Client;
         this.bucketName = bucketName;
         this.mapper     = new ObjectMapper().registerModule(new JavaTimeModule());
+        this.concurrency = concurrency;
     }
 
     @Override
     public Collection<Envelope> findByStatus(EnvelopeStatus status) throws InboxReadException {
-        String prefix = INBOX_PREFIX + status.name() + "/";
+        return read(status, object -> true);
+    }
+
+    @Override
+    public Collection<Envelope> findByStatusModifiedBefore(EnvelopeStatus status, Instant limit) throws InboxReadException {
+        return read(status, object -> object.lastModified().isBefore(limit));
+    }
+
+    private Collection<Envelope> read(EnvelopeStatus status, Predicate<S3Object> selection) throws InboxReadException {
         try {
-            ListObjectsV2Response listing = s3Client.listObjectsV2(
-                    ListObjectsV2Request.builder()
-                            .bucket(bucketName)
-                            .prefix(prefix)
-                            .build()
-            );
-
-            List<Envelope> envelopes = new ArrayList<>();
-            for (S3Object s3Obj : listing.contents()) {
-                S3EnvelopeDto dto = fetchDto(s3Obj.key());
-                envelopes.add(toEnvelope(dto, status));
-            }
-            return envelopes;
-
+            List<String> keys = listKeys(status, selection);
+            return concurrency.map(keys, key -> envelopeAt(key, status)).toList();
         } catch (InboxReadException e) {
             throw e;
         } catch (Exception e) {
             throw new InboxReadException("Failed to query inbox by status [" + status + "]: " + e.getMessage(), e);
+        }
+    }
+
+    private List<String> listKeys(EnvelopeStatus status, Predicate<S3Object> selection) {
+        String prefix = INBOX_PREFIX + status.name() + "/";
+        List<String> keys = new ArrayList<>();
+        String continuationToken = null;
+        do {
+            ListObjectsV2Response listing = s3Client.listObjectsV2(
+                    ListObjectsV2Request.builder()
+                            .bucket(bucketName)
+                            .prefix(prefix)
+                            .continuationToken(continuationToken)
+                            .build()
+            );
+            listing.contents().stream().filter(selection).map(S3Object::key).forEach(keys::add);
+            continuationToken = Boolean.TRUE.equals(listing.isTruncated()) ? listing.nextContinuationToken() : null;
+        } while (continuationToken != null);
+        return keys;
+    }
+
+    private Envelope envelopeAt(String key, EnvelopeStatus status) {
+        try {
+            return toEnvelope(fetchDto(key), status);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to read " + key + ": " + e.getMessage(), e);
         }
     }
 
