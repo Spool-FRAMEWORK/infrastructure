@@ -15,6 +15,7 @@ import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.inbox.InboxUpdater;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -91,19 +92,24 @@ public class S3InboxUpdater implements InboxUpdater {
                             .key(sourceKey)
                             .build()
             );
-            S3EnvelopeDto dto = mapper.readValue(raw.asByteArray(), S3EnvelopeDto.class);
+            S3EnvelopeDto moved = mapper.readValue(raw.asByteArray(), S3EnvelopeDto.class).movedTo(newStatus, Instant.now());
 
-            s3Client.copyObject(CopyObjectRequest.builder()
-                    .sourceBucket(bucketName).sourceKey(sourceKey)
-                    .destinationBucket(bucketName).destinationKey(destinationKey)
-                    .build()
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucketName)
+                            .key(destinationKey)
+                            .contentType("application/json")
+                            .build(),
+                    RequestBody.fromBytes(mapper.writeValueAsBytes(moved))
             );
-            s3Client.deleteObject(DeleteObjectRequest.builder()
-                    .bucket(bucketName).key(sourceKey)
-                    .build()
-            );
+            if (!sourceKey.equals(destinationKey)) {
+                s3Client.deleteObject(DeleteObjectRequest.builder()
+                        .bucket(bucketName).key(sourceKey)
+                        .build()
+                );
+            }
 
-            return toEnvelope(dto, idempotencyKey, newStatus);
+            return toEnvelope(moved, idempotencyKey, newStatus);
 
         } catch (InboxUpdateException e) {
             throw e;

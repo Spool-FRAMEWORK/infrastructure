@@ -52,11 +52,12 @@ public class FileSystemInboxUpdater implements InboxUpdater {
             }
             if (source == null) continue;
             try {
-                Envelope envelope = deserializer.deserialize(Files.readAllBytes(source));
+                Envelope moved = deserializer.deserialize(Files.readAllBytes(source)).withStatus(status);
                 Path targetDir = Path.of(path, status.name());
                 Files.createDirectories(targetDir);
+                Files.write(source, serializer.serialize(moved));
                 Files.move(source, targetDir.resolve(key.value() + ".json"), StandardCopyOption.REPLACE_EXISTING);
-                updated.add(envelope);
+                updated.add(moved);
             } catch (IOException e) {
                 throw new InboxUpdateException(idempotencyKeys, e.getMessage());
             }
