@@ -60,22 +60,10 @@ public class S3InboxReader implements InboxReader{
     public Optional<Envelope> findById(IdempotencyKey idempotencyKey) throws InboxReadException {
         try {
             for (EnvelopeStatus status : EnvelopeStatus.values()) {
-                String key = INBOX_PREFIX + status.name() + "/" + idempotencyKey.value();
-
-                ListObjectsV2Response listing = s3Client.listObjectsV2(
-                        ListObjectsV2Request.builder()
-                                .bucket(bucketName)
-                                .prefix(key)
-                                .build()
-                );
-
-                Optional<S3Object> match = listing.contents().stream()
-                        .filter(obj -> obj.key().equals(key))
-                        .findFirst();
-
-                if (match.isPresent()) {
-                    S3EnvelopeDto dto = fetchDto(match.get().key());
+                try {
+                    S3EnvelopeDto dto = fetchDto(INBOX_PREFIX + status.name() + "/" + idempotencyKey.value());
                     return Optional.of(toEnvelope(dto, status));
+                } catch (NoSuchKeyException ignored) {
                 }
             }
             return Optional.empty();
