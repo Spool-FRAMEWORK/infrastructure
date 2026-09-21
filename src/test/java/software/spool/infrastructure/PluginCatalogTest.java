@@ -58,6 +58,7 @@ class PluginCatalogTest {
                 "EVENT_CLASS_NORMALIZER",
                 "JSON_ARRAY_NORMALIZER",
                 "JSON_NORMALIZER",
+                "JSON_OBJECT_NORMALIZER",
                 "PDF_NORMALIZER");
     }
 
