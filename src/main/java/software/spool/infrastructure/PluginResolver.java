@@ -4,7 +4,9 @@ import software.spool.infrastructure.scan.ClasspathPluginScanner;
 import software.spool.infrastructure.spi.Plugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import java.util.Comparator;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class PluginResolver {
@@ -30,9 +32,25 @@ public final class PluginResolver {
                         "No plugin supports the given configuration for: " + type.getSimpleName()));
     }
 
+    /**
+     * Lists the plugins registered for a port, scanning the classpath the first time.
+     *
+     * @param type the port
+     * @return the plugin that wins for each name, sorted by name
+     */
+    public static <T extends Plugin<R>, R> Map<String, T> available(Class<T> type) {
+        ensureLoaded(type);
+        return new TreeMap<>(PluginRegistry.findAll(type));
+    }
+
     private static <T extends Plugin<R>, R> void ensureLoaded(Class<T> type) {
         if (LOADED.add(type)) {
-            SCANNER.scan(type);
+            try {
+                SCANNER.scan(type);
+            } catch (RuntimeException exception) {
+                LOADED.remove(type);
+                throw exception;
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 package software.spool.infrastructure.scan;
 
+import software.spool.infrastructure.PluginConflictException;
 import software.spool.infrastructure.spi.Plugin;
 import java.io.File;
 import java.util.Enumeration;
@@ -19,6 +20,8 @@ public final class JarScanner {
                     PluginCandidateLoader.tryRegister(className, type, cl);
                 }
             }
+        } catch (PluginConflictException exception) {
+            throw exception;
         } catch (Exception ignored) {}
     }
 

@@ -1,5 +1,6 @@
 package software.spool.infrastructure.scan;
 
+import software.spool.infrastructure.PluginConflictException;
 import software.spool.infrastructure.PluginRegistry;
 import software.spool.infrastructure.spi.Plugin;
 import software.spool.infrastructure.spi.SpoolPlugin;
@@ -18,6 +19,8 @@ final class PluginCandidateLoader {
             if (!type.isAssignableFrom(candidate)) return;
             T instance = (T) candidate.getDeclaredConstructor().newInstance();
             PluginRegistry.register(type, instance);
+        } catch (PluginConflictException exception) {
+            throw exception;
         } catch (NoClassDefFoundError | Exception ignored) {}
     }
 }
