@@ -3,6 +3,8 @@ package software.spool.infrastructure.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -20,12 +22,14 @@ import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.IdempotencyKey;
+import software.spool.core.utils.media.MediaTypes;
 import software.spool.infrastructure.adapter.inbox.s3.*;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
@@ -165,7 +169,70 @@ class S3InboxIntegrationTest {
         assertThat(objectExists("inbox/CAPTURED/remove-key")).isFalse();
     }
 
+    @Test
+    void update_toPersisted_thenRead_hasThePersistedStatusAndAnUpdatedAtFromTheMove() throws Exception {
+        new S3InboxWriter(s3, BUCKET).receive(capturedEnvelope("moved-key"));
+
+        new S3InboxUpdater(s3, BUCKET).update(List.of(IdempotencyKey.of("moved-key")), EnvelopeStatus.PERSISTED);
+
+        Collection<Envelope> persisted = new S3InboxReader(s3, BUCKET).findByStatus(EnvelopeStatus.PERSISTED);
+        assertThat(persisted).singleElement().satisfies(read -> {
+            assertThat(read.status()).isEqualTo(EnvelopeStatus.PERSISTED);
+            assertThat(read.updatedAt()).isAfter(Instant.now().minus(Duration.ofMinutes(1)));
+        });
+    }
+
+    @Test
+    void findByStatus_afterARepublication_readsTheWholeFolder() throws Exception {
+        S3InboxWriter writer = new S3InboxWriter(s3, BUCKET);
+        Envelope republished = capturedEnvelope("republished-key");
+        writer.receive(republished);
+        writer.receive(capturedEnvelope("untouched-key"));
+
+        new S3InboxUpdater(s3, BUCKET).update(republished.retry());
+
+        Collection<Envelope> captured = new S3InboxReader(s3, BUCKET).findByStatus(EnvelopeStatus.CAPTURED);
+        assertThat(captured)
+                .extracting(envelope -> envelope.idempotencyKey().value())
+                .containsExactlyInAnyOrder("republished-key", "untouched-key");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = EnvelopeStatus.class, mode = EnumSource.Mode.EXCLUDE, names = "CAPTURED")
+    void receive_aKeyAlreadyMovedToAnotherStatus_isRejectedAsADuplicate(EnvelopeStatus movedTo) throws Exception {
+        S3InboxWriter writer = new S3InboxWriter(s3, BUCKET);
+        writer.receive(capturedEnvelope("moved-duplicate-key"));
+        new S3InboxUpdater(s3, BUCKET).update(List.of(IdempotencyKey.of("moved-duplicate-key")), movedTo);
+
+        assertThatThrownBy(() -> writer.receive(capturedEnvelope("moved-duplicate-key")))
+                .isInstanceOf(DuplicateEventException.class);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = EnvelopeStatus.class, mode = EnumSource.Mode.EXCLUDE, names = "CAPTURED")
+    void receive_aRejectedDuplicate_writesNothingToCaptured(EnvelopeStatus movedTo) throws Exception {
+        S3InboxWriter writer = new S3InboxWriter(s3, BUCKET);
+        writer.receive(capturedEnvelope("moved-duplicate-key"));
+        new S3InboxUpdater(s3, BUCKET).update(List.of(IdempotencyKey.of("moved-duplicate-key")), movedTo);
+
+        assertThatThrownBy(() -> writer.receive(capturedEnvelope("moved-duplicate-key")))
+                .isInstanceOf(DuplicateEventException.class);
+        assertThat(objectExists("inbox/CAPTURED/moved-duplicate-key")).isFalse();
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    private static Envelope capturedEnvelope(String key) {
+        return new Envelope(
+                IdempotencyKey.of(key),
+                new EventMetadata(),
+                MediaTypes.JSON,
+                "{}".getBytes(StandardCharsets.UTF_8),
+                EnvelopeStatus.CAPTURED,
+                0,
+                Instant.now().minus(Duration.ofDays(2)),
+                null);
+    }
 
     private static void writeFixture(String key, EnvelopeStatus status) throws Exception {
         String s3Key = "inbox/" + status.name() + "/" + key;
