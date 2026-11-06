@@ -34,6 +34,14 @@ services:
     ports:
       - "9092:9092"
 
+  localstack:
+    image: localstack/localstack:3.8.1
+    container_name: spool-localstack
+    environment:
+      SERVICES: s3
+    ports:
+      - "4566:4566"
+
   tempo:
     image: grafana/tempo:2.6.1
     container_name: spool-tempo
