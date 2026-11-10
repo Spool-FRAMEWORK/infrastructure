@@ -4,7 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import software.spool.core.exception.EventBusEmitException;
 import software.spool.core.port.bus.Subscription;
-import software.spool.infrastructure.adapter.bus.memory.InMemoryEventBus;
+import software.spool.core.adapter.memory.InMemoryEventBus;
 import software.spool.infrastructure.adapter.bus.memory.InMemoryEventBusProvider;
 import software.spool.infrastructure.fixture.AnotherTestEvent;
 import software.spool.infrastructure.fixture.PluginConfigurationMother;

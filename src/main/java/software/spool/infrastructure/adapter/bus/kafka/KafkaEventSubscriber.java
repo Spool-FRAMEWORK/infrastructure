@@ -9,9 +9,8 @@ import software.spool.core.model.Event;
 import software.spool.core.port.bus.EventSubscriber;
 import software.spool.core.port.bus.Handler;
 import software.spool.core.port.bus.Subscription;
-import software.spool.core.utils.routing.DefaultEventRouter;
+import software.spool.core.utils.routing.AnnotationEventRouter;
 import software.spool.core.utils.routing.EventRouter;
-import software.spool.core.utils.routing.EventUtils;
 
 import java.util.List;
 import java.util.Properties;
@@ -26,7 +25,7 @@ public class KafkaEventSubscriber implements EventSubscriber {
     }
 
     public KafkaEventSubscriber(KafkaEventBusConfig config) {
-        this(config, new DefaultEventRouter());
+        this(config, new AnnotationEventRouter());
     }
 
 
@@ -38,11 +37,12 @@ public class KafkaEventSubscriber implements EventSubscriber {
     ) throws EventBusSubscriptionException {
         Properties props = new Properties();
         props.putAll(baseProps);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, EventUtils.resolveAddress(eventType));
+        String channel = router.routeOf(eventType).channel().value();
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, channel);
 
         try {
             KafkaConsumer<String, byte[]> consumer = new KafkaConsumer<>(props);
-            consumer.subscribe(List.of(router.resolve(eventType)));
+            consumer.subscribe(List.of(channel));
 
             KafkaSubscription<E> subscription =
                     new KafkaSubscription<>(consumer, handler, eventType);

@@ -2,6 +2,7 @@ package software.spool.infrastructure.adapter.bus.memory;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import software.spool.core.adapter.memory.InMemoryEventBus;
 import software.spool.core.exception.EventBusEmitException;
 import software.spool.core.port.bus.Subscription;
 import software.spool.infrastructure.fixture.AnotherTestEvent;
@@ -112,10 +113,6 @@ class InMemoryEventBusTest {
                 .hasMessageContaining("boom");
     }
 
-    @Test
-    void instance_calledMultipleTimes_returnsSameObject() {
-        assertThat(InMemoryEventBus.instance()).isSameAs(InMemoryEventBus.instance());
-    }
 
     @Test
     void constructor_withCustomRouter_createsIndependentBus() throws Exception {

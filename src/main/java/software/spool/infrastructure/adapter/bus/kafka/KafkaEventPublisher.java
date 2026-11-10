@@ -9,7 +9,7 @@ import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.EventBusEmitException;
 import software.spool.core.model.Event;
 import software.spool.core.port.bus.EventPublisher;
-import software.spool.core.utils.routing.DefaultEventRouter;
+import software.spool.core.utils.routing.AnnotationEventRouter;
 import software.spool.core.utils.routing.EventRouter;
 
 import java.nio.charset.StandardCharsets;
@@ -25,7 +25,7 @@ public class KafkaEventPublisher implements EventPublisher, AutoCloseable {
     }
 
     public KafkaEventPublisher(KafkaEventBusConfig config) {
-        this(config, new DefaultEventRouter());
+        this(config, new AnnotationEventRouter());
     }
 
     @Override
@@ -35,13 +35,13 @@ public class KafkaEventPublisher implements EventPublisher, AutoCloseable {
                     .serialize(event);
 
             ProducerRecord<String, byte[]> record =
-                    new ProducerRecord<>(router.resolve(event.getClass()), payload);
+                    new ProducerRecord<>(router.routeOf(event.getClass()).channel().value(), payload);
 
             producer.send(record, (metadata, ex) -> {
                 if (ex != null) {
                     throw new EventBusEmitException(
                             event,
-                            "Failed to deliver message to destination " + router.resolve(event.getClass()),
+                            "Failed to deliver message to destination " + router.routeOf(event.getClass()).channel().value(),
                             ex
                     );
                 }
@@ -49,7 +49,7 @@ public class KafkaEventPublisher implements EventPublisher, AutoCloseable {
         } catch (Exception e) {
             throw new EventBusEmitException(
                     event,
-                    "Failed to emit message to Kafka destination [" + router.resolve(event.getClass()) + "]",
+                    "Failed to emit message to Kafka destination [" + router.routeOf(event.getClass()).channel().value() + "]",
                     e
             );
         }

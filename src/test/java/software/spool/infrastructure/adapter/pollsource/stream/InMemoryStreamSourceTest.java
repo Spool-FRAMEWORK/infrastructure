@@ -6,7 +6,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.spool.core.port.bus.EventBus;
 import software.spool.core.port.bus.Subscription;
-import software.spool.infrastructure.adapter.bus.memory.InMemoryEventBus;
+import software.spool.core.adapter.memory.InMemoryEventBus;
 import software.spool.infrastructure.fixture.TestEvent;
 
 import java.util.ArrayList;
