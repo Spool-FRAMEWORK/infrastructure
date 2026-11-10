@@ -25,7 +25,8 @@ public class KafkaEventBusProvider implements EventBusProvider {
     @Override
     public EventBus create(PluginConfiguration configuration) {
         return new KafkaEventBus(new KafkaEventBusConfig(
-                configuration.require("bootstrap.servers")
+                configuration.require("bootstrap.servers"),
+                configuration.get("subscriber.id")
         ));
     }
 }

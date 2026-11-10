@@ -8,6 +8,7 @@ import software.spool.core.adapter.memory.InMemoryEventBus;
 import software.spool.infrastructure.adapter.bus.memory.InMemoryEventBusProvider;
 import software.spool.infrastructure.fixture.AnotherTestEvent;
 import software.spool.infrastructure.fixture.PluginConfigurationMother;
+import software.spool.infrastructure.fixture.PriceChanged;
 import software.spool.infrastructure.fixture.TestEvent;
 
 import java.util.ArrayList;
@@ -79,14 +80,14 @@ class InMemoryEventBusIntegrationTest {
     @Test
     void subscription_cancelOneOfMany_othersContinueReceiving() throws Exception {
         List<String> log = new ArrayList<>();
-        Subscription first = bus.subscribe(TestEvent.class, e -> log.add("first"));
-        Subscription second = bus.subscribe(TestEvent.class, e -> log.add("second"));
+        Subscription first = bus.subscribe(PriceChanged.class, e -> log.add("first"));
+        Subscription second = bus.subscribe(PriceChanged.class, e -> log.add("second"));
 
-        bus.publish(new TestEvent("x"));
+        bus.publish(new PriceChanged("x"));
         first.cancel();
-        bus.publish(new TestEvent("y"));
+        bus.publish(new PriceChanged("y"));
         second.cancel();
-        bus.publish(new TestEvent("z"));
+        bus.publish(new PriceChanged("z"));
 
         assertThat(log).containsExactly("first", "second", "second");
     }

@@ -6,6 +6,7 @@ import software.spool.core.adapter.memory.InMemoryEventBus;
 import software.spool.core.exception.EventBusEmitException;
 import software.spool.core.port.bus.Subscription;
 import software.spool.infrastructure.fixture.AnotherTestEvent;
+import software.spool.infrastructure.fixture.PriceChanged;
 import software.spool.infrastructure.fixture.TestEvent;
 
 import java.util.ArrayList;
@@ -35,12 +36,12 @@ class InMemoryEventBusTest {
     }
 
     @Test
-    void publish_multipleSubscribers_allHandlersReceiveEvent() throws Exception {
+    void publish_eventDeliveredToEverySubscriber_allHandlersReceiveEvent() throws Exception {
         List<String> log = new ArrayList<>();
-        bus.subscribe(TestEvent.class, e -> log.add("first:" + e.payload()));
-        bus.subscribe(TestEvent.class, e -> log.add("second:" + e.payload()));
+        bus.subscribe(PriceChanged.class, e -> log.add("first:" + e.payload()));
+        bus.subscribe(PriceChanged.class, e -> log.add("second:" + e.payload()));
 
-        bus.publish(new TestEvent("ping"));
+        bus.publish(new PriceChanged("ping"));
 
         assertThat(log).containsExactlyInAnyOrder("first:ping", "second:ping");
     }
