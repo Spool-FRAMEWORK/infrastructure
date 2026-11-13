@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public class S3InboxUpdater implements InboxUpdater {
 
@@ -67,23 +68,18 @@ public class S3InboxUpdater implements InboxUpdater {
                                        EnvelopeStatus newStatus) throws InboxUpdateException {
         List<Envelope> updated = new ArrayList<>();
         for (IdempotencyKey key : idempotencyKeys) {
-            updated.add(moveToStatus(key, newStatus));
+            Optional<String> sourceKey = findCurrentKey(key);
+            if (sourceKey.isPresent()) {
+                updated.add(moveToStatus(key, sourceKey.get(), newStatus));
+            }
         }
         return updated;
     }
 
     private Envelope moveToStatus(IdempotencyKey idempotencyKey,
+                                  String sourceKey,
                                   EnvelopeStatus newStatus) throws InboxUpdateException {
         try {
-            String sourceKey = findCurrentKey(idempotencyKey);
-            if (sourceKey == null) {
-                throw new InboxUpdateException(
-                        idempotencyKey,
-                        "Envelope not found in S3 inbox: " + idempotencyKey.value(),
-                        null
-                );
-            }
-
             String destinationKey = INBOX_PREFIX + newStatus.name() + "/" + idempotencyKey.value();
 
             ResponseBytes<GetObjectResponse> raw = s3Client.getObjectAsBytes(
@@ -111,14 +107,12 @@ public class S3InboxUpdater implements InboxUpdater {
 
             return toEnvelope(moved, idempotencyKey, newStatus);
 
-        } catch (InboxUpdateException e) {
-            throw e;
         } catch (Exception e) {
             throw new InboxUpdateException(idempotencyKey, e.getMessage(), e);
         }
     }
 
-    private String findCurrentKey(IdempotencyKey idempotencyKey) {
+    private Optional<String> findCurrentKey(IdempotencyKey idempotencyKey) {
         for (EnvelopeStatus status : EnvelopeStatus.values()) {
             String candidate = INBOX_PREFIX + status.name() + "/" + idempotencyKey.value();
             try {
@@ -127,11 +121,11 @@ public class S3InboxUpdater implements InboxUpdater {
                         .key(candidate)
                         .build()
                 );
-                return candidate;
+                return Optional.of(candidate);
             } catch (NoSuchKeyException ignored) {
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     private Envelope toEnvelope(S3EnvelopeDto dto,
