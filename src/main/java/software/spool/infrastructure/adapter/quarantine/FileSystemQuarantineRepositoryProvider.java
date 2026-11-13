@@ -1,12 +1,12 @@
 package software.spool.infrastructure.adapter.quarantine;
 
+import software.spool.core.port.quarantine.QuarantineRepository;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
-import software.spool.infrastructure.spi.provider.quarantine.QuarantineStoreProvider;
-import software.spool.ingester.api.port.QuarantineStore;
+import software.spool.infrastructure.spi.provider.quarantine.QuarantineRepositoryProvider;
 
-@SpoolPlugin(QuarantineStoreProvider.class)
-public class FileSystemQuarantineStoreProvider implements QuarantineStoreProvider {
+@SpoolPlugin(QuarantineRepositoryProvider.class)
+public class FileSystemQuarantineRepositoryProvider implements QuarantineRepositoryProvider {
     @Override
     public String name() {
         return "FILE_SYSTEM";
@@ -23,7 +23,7 @@ public class FileSystemQuarantineStoreProvider implements QuarantineStoreProvide
     }
 
     @Override
-    public QuarantineStore create(PluginConfiguration configuration) {
-        return new FileSystemQuarantineStore(configuration.require("path"));
+    public QuarantineRepository create(PluginConfiguration configuration) {
+        return new FileSystemQuarantineRepository(configuration.require("path"));
     }
 }

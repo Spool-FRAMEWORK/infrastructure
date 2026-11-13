@@ -11,9 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class FileSystemQuarantineStoreProviderTest {
+class FileSystemQuarantineRepositoryProviderTest {
 
-    private final FileSystemQuarantineStoreProvider provider = new FileSystemQuarantineStoreProvider();
+    private final FileSystemQuarantineRepositoryProvider provider = new FileSystemQuarantineRepositoryProvider();
 
     @Mock
     private PluginConfiguration config;
@@ -46,7 +46,7 @@ class FileSystemQuarantineStoreProviderTest {
     }
 
     @Test
-    void create_withValidConfig_returnsNonNullStore() {
+    void create_withValidConfig_returnsNonNullRepository() {
         assertThat(provider.create(PluginConfigurationMother.withPath("target/spool-test/quarantine"))).isNotNull();
     }
 }
