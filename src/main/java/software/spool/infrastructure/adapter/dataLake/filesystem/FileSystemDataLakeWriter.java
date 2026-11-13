@@ -2,6 +2,7 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
+import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.*;
 import software.spool.core.port.serde.RecordSerializer;
 import software.spool.ingester.api.port.DataLakeWriter;
@@ -39,7 +40,7 @@ public class FileSystemDataLakeWriter implements DataLakeWriter {
             IdempotencyKey key = envelope.idempotencyKey();
             PartitionKeySchema partitionKeySchema = PayloadDeserializerFactory.json().as(PartitionKeySchema.class)
                     .deserialize(envelope.metadata().get(EventMetadataKey.PARTITION_SCHEMA));
-            Path file = Path.of(path,  "bronze/" + PartitionKey.of(partitionKeySchema).from(envelope.payload()).value().replace("::", "/") + "/" + key.value() + ".json");
+            Path file = Path.of(path,  "bronze/" + String.join("/", KeyEntries.split(PartitionKey.of(partitionKeySchema).from(envelope.payload()).value())) + "/" + key.value() + ".json");
             Files.createDirectories(file.getParent());
             Files.write(file, serializer.serialize(envelope));
             return key;

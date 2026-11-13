@@ -1,6 +1,7 @@
 package software.spool.infrastructure.adapter.dataLake.filesystem;
 
 import software.spool.core.adapter.logging.LoggerFactory;
+import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.logging.Logger;
 import software.spool.mounter.api.MountMode;
@@ -11,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
@@ -85,10 +87,8 @@ public class FileSystemPartitionDiscovery implements PartitionDiscovery {
 
     private PartitionKey toPartitionKey(Path dir, Path layerPath) {
         Path relative = layerPath.relativize(dir);
-        String[] segments = new String[relative.getNameCount()];
-        for (int i = 0; i < relative.getNameCount(); i++) {
-            segments[i] = relative.getName(i).toString();
-        }
-        return new PartitionKey(String.join("::", segments));
+        List<String> segments = new ArrayList<>();
+        relative.forEach(segment -> segments.add(segment.toString()));
+        return new PartitionKey(KeyEntries.join(segments));
     }
 }

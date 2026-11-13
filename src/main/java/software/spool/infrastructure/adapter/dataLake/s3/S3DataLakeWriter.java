@@ -5,6 +5,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
+import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.*;
 import software.spool.ingester.api.port.DataLakeWriter;
 
@@ -49,7 +50,7 @@ public class S3DataLakeWriter implements DataLakeWriter {
     private String buildKey(Envelope item) {
         String partition = PartitionKey.of(getPartitionKeySchemaFrom(item)).from(item.payload()).value();
         String filename = item.idempotencyKey().value();
-        return partition.replace("::", "/") + "/" + filename;
+        return String.join("/", KeyEntries.split(partition)) + "/" + filename;
     }
 
     private static PartitionKeySchema getPartitionKeySchemaFrom(Envelope item) {

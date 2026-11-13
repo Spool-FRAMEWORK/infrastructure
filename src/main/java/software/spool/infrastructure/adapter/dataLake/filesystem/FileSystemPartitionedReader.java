@@ -2,6 +2,7 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 
 import software.spool.core.adapter.logging.LoggerFactory;
 import software.spool.core.exception.DeserializationException;
+import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.serde.PayloadDeserializer;
@@ -18,6 +19,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -167,16 +169,14 @@ public class FileSystemPartitionedReader implements PartitionedReader {
 
     private PartitionKey resolveFileKey(Path file, Path searchPath) {
         Path relative = searchPath.relativize(file.getParent());
-        String[] segments = new String[relative.getNameCount()];
-        for (int i = 0; i < relative.getNameCount(); i++) {
-            segments[i] = relative.getName(i).toString();
-        }
-        return new PartitionKey(String.join("::", segments));
+        List<String> segments = new ArrayList<>();
+        relative.forEach(segment -> segments.add(segment.toString()));
+        return new PartitionKey(KeyEntries.join(segments));
     }
 
     static Map<String, String> parseConstraints(PartitionKey partitionKey) {
         Map<String, String> constraints = new LinkedHashMap<>();
-        for (String segment : partitionKey.value().split("::")) {
+        for (String segment : KeyEntries.split(partitionKey.value())) {
             int eq = segment.indexOf('=');
             if (eq > 0) {
                 constraints.put(segment.substring(0, eq), segment.substring(eq + 1));

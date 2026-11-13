@@ -1,5 +1,6 @@
 package software.spool.infrastructure.adapter.datamart;
 
+import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.mounter.api.port.DataMartWriter;
 import software.spool.mounter.api.port.MountTarget;
@@ -53,7 +54,7 @@ public class RawFileSystemDataMartWriter implements DataMartWriter {
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
         concurrency.forEach(result, partitioned -> {
-            String partitionPath = partitioned.partitionKey().value().replace("::", "/");
+            String partitionPath = String.join("/", KeyEntries.split(partitioned.partitionKey().value()));
             Path dir = basePath.resolve(target.qualifiedDataMart()).resolve(partitionPath);
             try {
                 Files.createDirectories(dir);

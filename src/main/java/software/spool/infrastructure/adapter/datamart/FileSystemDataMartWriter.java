@@ -1,6 +1,7 @@
 package software.spool.infrastructure.adapter.datamart;
 
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
+import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.serde.RecordSerializer;
 import software.spool.mounter.api.port.DataMartWriter;
@@ -68,7 +69,7 @@ public class FileSystemDataMartWriter implements DataMartWriter {
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
         concurrency.forEach(result, partitioned -> {
-            String partitionPath = partitioned.partitionKey().value().replace("::", "/");
+            String partitionPath = String.join("/", KeyEntries.split(partitioned.partitionKey().value()));
             Path dir = basePath.resolve(target.qualifiedDataMart()).resolve(partitionPath);
             try {
                 Files.createDirectories(dir);
