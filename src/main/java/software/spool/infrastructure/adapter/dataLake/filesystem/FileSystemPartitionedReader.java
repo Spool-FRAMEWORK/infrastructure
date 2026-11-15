@@ -98,7 +98,7 @@ public class FileSystemPartitionedReader implements PartitionedReader {
         return concurrency.map(slice, file -> {
                     long count = counter.incrementAndGet();
                     if (count % 100 == 0) log.info("Streamed {}/{} files...", count, total);
-                    return toRecord(file, resolved.path());
+                    return toRecord(file, layerPath);
                 })
                 .onClose(() -> log.info("Read complete — {} files streamed", counter.get()));
     }
@@ -152,11 +152,11 @@ public class FileSystemPartitionedReader implements PartitionedReader {
                 .allMatch(e -> normalised.contains("/" + e.getKey() + "=" + e.getValue() + "/"));
     }
 
-    private PartitionedRecord<GenericRecord> toRecord(Path file, Path searchPath) {
+    private PartitionedRecord<GenericRecord> toRecord(Path file, Path layerPath) {
         try {
             byte[] bytes = Files.readAllBytes(file);
             GenericRecord record = deserializer.deserialize(bytes);
-            PartitionKey fileKey = resolveFileKey(file, searchPath);
+            PartitionKey fileKey = resolveFileKey(file, layerPath);
             return new PartitionedRecord<>(fileKey, record);
         } catch (IOException e) {
             log.error("Failed to read file: {}", file, e);
@@ -167,8 +167,8 @@ public class FileSystemPartitionedReader implements PartitionedReader {
         }
     }
 
-    private PartitionKey resolveFileKey(Path file, Path searchPath) {
-        Path relative = searchPath.relativize(file.getParent());
+    private PartitionKey resolveFileKey(Path file, Path layerPath) {
+        Path relative = layerPath.relativize(file.getParent());
         List<String> segments = new ArrayList<>();
         relative.forEach(segment -> segments.add(segment.toString()));
         return new PartitionKey(KeyEntries.join(segments));
