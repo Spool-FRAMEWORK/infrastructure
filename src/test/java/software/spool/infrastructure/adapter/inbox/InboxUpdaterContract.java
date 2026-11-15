@@ -17,7 +17,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Rules every {@link InboxUpdater} adapter must follow when it moves envelopes to another status.
+ * Rules every {@link InboxUpdater} adapter must follow when it moves envelopes to another status or writes one.
  */
 public abstract class InboxUpdaterContract {
 
@@ -50,6 +50,18 @@ public abstract class InboxUpdaterContract {
 
         assertThat(moved).isEmpty();
         assertThat(find(MISSING_KEY)).isEmpty();
+    }
+
+    @Test
+    void updateEnvelope_keyNotInTheInbox_writesItUnderItsStatus() throws Exception {
+        Envelope envelope = capturedEnvelope(MISSING_KEY);
+
+        updater().update(envelope);
+
+        assertThat(find(MISSING_KEY)).hasValueSatisfying(written -> {
+            assertThat(written.status()).isEqualTo(EnvelopeStatus.CAPTURED);
+            assertThat(written.payload()).isEqualTo(envelope.payload());
+        });
     }
 
     private static Envelope capturedEnvelope(IdempotencyKey idempotencyKey) {

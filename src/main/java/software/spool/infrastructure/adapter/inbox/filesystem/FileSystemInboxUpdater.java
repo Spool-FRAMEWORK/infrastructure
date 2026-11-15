@@ -29,9 +29,10 @@ public class FileSystemInboxUpdater implements InboxUpdater {
 
     @Override
     public Envelope update(Envelope envelope) throws InboxUpdateException {
-        Path filePath = Path.of(path, envelope.status().name(), envelope.idempotencyKey().value() + ".json");
+        Path statusFolder = Path.of(path, envelope.status().name());
         try {
-            Files.write(filePath, serializer.serialize(envelope));
+            Files.createDirectories(statusFolder);
+            Files.write(statusFolder.resolve(envelope.idempotencyKey().value() + ".json"), serializer.serialize(envelope));
             return envelope;
         } catch (IOException e) {
             throw new InboxUpdateException(List.of(envelope.idempotencyKey()), e.getMessage());
