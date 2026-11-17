@@ -2,6 +2,7 @@ package software.spool.infrastructure.adapter.authentication.hmac;
 
 import software.spool.core.port.authentication.RequestAuthenticator;
 import software.spool.infrastructure.spi.SpoolPlugin;
+import software.spool.infrastructure.spi.provider.InvalidPluginConfigurationException;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.infrastructure.spi.provider.authentication.RequestAuthenticatorProvider;
 
@@ -53,7 +54,8 @@ public class HmacSignatureRequestAuthenticatorProvider implements RequestAuthent
         try {
             return tolerance.map(Duration::parse).orElse(DEFAULT_TOLERANCE);
         } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("tolerance must be an ISO 8601 duration such as PT5M, got '" + tolerance.orElseThrow() + "'");
+            throw new InvalidPluginConfigurationException("tolerance",
+                    "must be an ISO 8601 duration such as PT5M, got '" + tolerance.orElseThrow() + "'");
         }
     }
 

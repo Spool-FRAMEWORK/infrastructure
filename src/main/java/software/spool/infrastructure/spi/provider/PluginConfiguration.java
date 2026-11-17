@@ -40,8 +40,7 @@ public final class PluginConfiguration {
     }
 
     public String require(String key) {
-        return get(key).orElseThrow(() ->
-                new IllegalArgumentException("Missing required configuration key: " + key));
+        return get(key).orElseThrow(() -> new InvalidPluginConfigurationException(key, "is required"));
     }
 
     public boolean has(String key) {
