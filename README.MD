@@ -4,7 +4,7 @@
 [![Java](https://img.shields.io/badge/Java-21%2B-orange.svg)](https://openjdk.org/)
 [![Maven](https://img.shields.io/badge/build-Maven-C71A36.svg)](https://maven.apache.org/)
 
-**Infrastructure** is the **Spool** framework module that provides **ready-to-use adapters** for connecting the framework to real external systems — HTTP sources, file system, S3, Kafka, and normalizers for JSON, YAML, PDF, and images.
+**Infrastructure** is the **Spool** framework module that provides **ready-to-use adapters** for connecting the framework to real external systems: HTTP sources, file system, S3, Kafka, normalizers for JSON and PDF, and request authentication. The full list is in [Available Adapters](#available-adapters).
 
 ---
 
@@ -33,7 +33,7 @@ spool-infrastructure
 ├── adapter/inbox/         FileSystemInboxWriter, S3InboxWriter
 ├── adapter/datalake/      FileSystemDataLakeWriter, S3DataLakeWriter
 ├── adapter/datamart/      FileSystemDataMartWriter
-├── adapter/serde/         JSON, JSON_ARRAY, YAML, PDF, Image, EventClass normalizers
+├── adapter/serde/         JSON, JSON_ARRAY, JSON_OBJECT, PDF and EventClass normalizers
 ├── adapter/bus/           Kafka EventBus
 └── spi/                   Plugin, PluginRegistry, PluginResolver
 ```
@@ -170,20 +170,34 @@ com.example.MyInboxWriterProvider
 
 ## Available Adapters
 
-| Category | Adapter | Description |
-|---|---|---|
-| Poll Source | `HTTPPollSource` | GET request, returns `byte[]`. |
-| Inbox | `FileSystemInboxWriter` | Writes envelopes as files. |
-| Inbox | `S3InboxWriter` | Writes envelopes to an S3 bucket. |
-| Data Lake | `FileSystemDataLakeWriter` | Writes batches as files. |
-| Data Lake | `S3DataLakeWriter` | Writes batches to an S3 bucket. |
-| Data Mart | `FileSystemDataMartWriter` | Writes mount results as files. |
-| Normalizer | `JSONNormalizerProvider` | Parses a single JSON object. |
-| Normalizer | `JSONArrayNormalizerProvider` | Parses a JSON array and splits elements. |
-| Normalizer | `PDFNormalizerProvider` | Extracts text from PDF documents. |
-| Normalizer | `ImageNormalizerProvider` | Processes image payloads. |
-| Normalizer | `EventClassNormalizerProvider` | Deserializes directly to a typed event class. |
-| Event Bus | Kafka adapter | Kafka-backed `EventBus` implementation. |
+Every adapter is a plugin: the descriptor names it by its type, and the port decides what it is for. This table is
+the catalogue. `ReadmeAdaptersTest` checks that every port is in it and that each row lists exactly the types
+registered for that port, so a plugin cannot be added without appearing here.
+
+| Port | Provider | Types | Configuration |
+|---|---|---|---|
+| Event bus | `EventBusProvider` | `IN_MEMORY`, `KAFKA` | `KAFKA`: `bootstrap.servers`, `subscriber.id` optional |
+| Inbox, write | `InboxWriterProvider` | `FILE_SYSTEM`, `S3` | `FILE_SYSTEM`: `path`. `S3`: `bucket`, `region`, `endpoint` |
+| Inbox, read | `InboxReaderProvider` | `FILE_SYSTEM`, `S3` | same as the inbox writer |
+| Inbox, update | `InboxUpdaterProvider` | `FILE_SYSTEM`, `S3` | same as the inbox writer |
+| Inbox, remove | `InboxEnvelopeRemoverProvider` | `FILE_SYSTEM`, `S3` | same as the inbox writer |
+| Data lake, write | `DataLakeWriterProvider` | `FILE_SYSTEM`, `S3` | `FILE_SYSTEM`: `path`. `S3`: `bucket`, `region`, `endpoint` |
+| Data lake, bronze | `BronzeRepositoryProvider` | `FILE_SYSTEM`, `S3` | same as the data lake writer |
+| Data lake, read partitions | `PartitionedReaderProvider` | `FILE_SYSTEM` | `path`, `payload` |
+| Data mart, write | `DataMartWriterProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM` | `path` |
+| Quarantine | `QuarantineRepositoryProvider` | `FILE_SYSTEM` | `path` |
+| Poll source | `PollSourceProvider` | `HTTP` | `sourceId`, `url` |
+| Stream source | `StreamSourceProvider` | `IN_MEMORY` | `sourceId`, `eventClassName` |
+| Normalizer (media type) | `NormalizerProvider` | `JSON`, `JSON_ARRAY`, `JSON_OBJECT`, `EVENT_CLASS`, `EVENT_CLASS_ARRAY`, `PDF` | `rootPath`, `rules`, set by the crawler |
+| Error router | `ErrorRouterProvider` | `DEFAULT` | none |
+| Authentication | `RequestAuthenticatorProvider` | `OIDC`, `HMAC_SIGNATURE` | `OIDC`: `issuer`, `audience`, `jwksUri` and `rolesClaim` optional. `HMAC_SIGNATURE`: `header`, `secret`, `timestampHeader`, `tolerance` and `roles` optional |
+
+The `S3` adapters also read `accessKeyEnv` and `secretKeyEnv`, the names of the environment variables with the
+credentials.
+
+There is no relational backend: no PostgreSQL, no JDBC. The inbox, the data lake and the data mart are files or S3
+objects. A database is a new adapter, written as a plugin of the port it serves (see
+[Custom Plugin via SPI](#custom-plugin-via-spi)).
 
 ---
 
