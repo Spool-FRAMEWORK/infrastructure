@@ -4,6 +4,7 @@ import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.serde.RecordSerializer;
+import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.DataMartWriter;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedRecord;
@@ -73,12 +74,16 @@ public class FileSystemDataMartWriter implements DataMartWriter {
             Path dir = basePath.resolve(target.qualifiedDataMart()).resolve(partitionPath);
             try {
                 Files.createDirectories(dir);
-                byte[] serialized = serializer.serialize(partitioned.record());
+                byte[] serialized = serializer.serialize(contentOf(partitioned.record()));
                 Path file = dir.resolve(IdempotencyKey.of(target.dataMart(), serialized).value() + "." + target.resolveExtension(serialized));
                 Files.write(file, serialized);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         });
+    }
+
+    private static Object contentOf(Object record) {
+        return record instanceof GenericRecord generic ? generic.toMap() : record;
     }
 }
