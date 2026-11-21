@@ -1,27 +1,33 @@
 package software.spool.infrastructure.adapter.dataLake.s3;
 
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.adapter.logging.LoggerFactory;
-import software.spool.core.model.vo.*;
-import software.spool.core.port.logging.Logger;
-import software.spool.core.port.datalake.DataLakeWriter;
+import software.spool.core.model.vo.Envelope;
+import software.spool.core.model.vo.EnvelopeHeader;
+import software.spool.core.model.vo.IdempotencyKey;
+import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.model.vo.PartitionedEnvelope;
+import software.spool.core.port.datalake.DataLakeWriter;
+import software.spool.core.port.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
+/**
+ * {@link DataLakeWriter} that keeps each envelope as one object of a bucket, laid out by {@link S3DataLakeLayout}: its
+ * payload as it came, with its media type as content type and its header as user metadata, in a single request. A
+ * header too big for the user metadata goes to an object of its own, written after the payload.
+ */
 public class S3DataLakeWriter implements DataLakeWriter {
     private static final Logger LOG = LoggerFactory.getLogger(S3DataLakeWriter.class);
-
-    private static final String CONTENT_TYPE = "application/json";
+    private static final String HEADER_CONTENT_TYPE = "application/json";
 
     private final S3Client s3Client;
     private final String bucket;
@@ -47,11 +53,22 @@ public class S3DataLakeWriter implements DataLakeWriter {
     }
 
     private void save(PartitionKey partition, Envelope envelope) {
-        byte[] content = RecordSerializerFactory.record().serialize(envelope);
+        EnvelopeHeader header = envelope.header();
+        Optional<Map<String, String>> headerMetadata = S3EnvelopeHeaderMetadata.metadataOf(header);
+        put(S3DataLakeLayout.payloadKeyOf(partition, header), header.mediaType().value(), headerMetadata.orElse(Map.of()),
+                envelope.payload());
+        if (headerMetadata.isEmpty()) {
+            put(S3DataLakeLayout.headerKeyOf(partition, header.idempotencyKey()), HEADER_CONTENT_TYPE, Map.of(),
+                    RecordSerializerFactory.record().serialize(header));
+        }
+    }
+
+    private void put(String key, String contentType, Map<String, String> metadata, byte[] content) {
         s3Client.putObject(PutObjectRequest.builder()
                         .bucket(bucket)
-                        .key(S3DataLakeLayout.objectKeyOf(partition, envelope.idempotencyKey()))
-                        .contentType(CONTENT_TYPE)
+                        .key(key)
+                        .contentType(contentType)
+                        .metadata(metadata)
                         .contentLength((long) content.length)
                         .build(),
                 RequestBody.fromBytes(content));

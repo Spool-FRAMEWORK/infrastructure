@@ -2,6 +2,7 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.model.vo.Envelope;
+import software.spool.core.model.vo.EnvelopeHeader;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.PartitionedEnvelope;
 import software.spool.core.port.datalake.DataLakeWriter;
@@ -15,11 +16,12 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 /**
- * {@link DataLakeWriter} that keeps each envelope in a file, laid out by {@link FileSystemDataLakeLayout}.
+ * {@link DataLakeWriter} that keeps the payload of each envelope as it came and its header next to it, laid out by
+ * {@link FileSystemDataLakeLayout}. The header is written last: an envelope is there once its header is.
  */
 public class FileSystemDataLakeWriter implements DataLakeWriter {
     private final FileSystemDataLakeLayout layout;
-    private final RecordSerializer<Envelope> serializer = RecordSerializerFactory.record();
+    private final RecordSerializer<EnvelopeHeader> serializer = RecordSerializerFactory.record();
 
     public FileSystemDataLakeWriter(String path) {
         this.layout = new FileSystemDataLakeLayout(path);
@@ -33,11 +35,13 @@ public class FileSystemDataLakeWriter implements DataLakeWriter {
     }
 
     private IdempotencyKey writeEnvelope(PartitionedEnvelope item) {
-        Path file = layout.fileOf(item.partition(), item.envelope().idempotencyKey());
+        Envelope envelope = item.envelope();
+        Path headerFile = layout.headerFileOf(item.partition(), envelope.idempotencyKey());
         try {
-            Files.createDirectories(file.getParent());
-            Files.write(file, serializer.serialize(item.envelope()));
-            return item.envelope().idempotencyKey();
+            Files.createDirectories(headerFile.getParent());
+            Files.write(layout.payloadFileOf(item.partition(), envelope.header()), envelope.payload());
+            Files.write(headerFile, serializer.serialize(envelope.header()));
+            return envelope.idempotencyKey();
         } catch (IOException e) {
             return null;
         }

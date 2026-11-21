@@ -38,7 +38,11 @@ public final class InMemoryS3Client implements S3Client {
 
     private static final int MAXIMUM_KEYS_PER_LISTING = 1000;
 
-    private record StoredObject(byte[] content, Instant lastModified) {}
+    private record StoredObject(byte[] content, Instant lastModified, String contentType, Map<String, String> metadata) {
+        StoredObject(byte[] content, Instant lastModified) {
+            this(content, lastModified, null, Map.of());
+        }
+    }
 
     private final Map<String, StoredObject> objects = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> requests = new ConcurrentHashMap<>();
@@ -48,7 +52,7 @@ public final class InMemoryS3Client implements S3Client {
     }
 
     public void setLastModified(String key, Instant lastModified) {
-        objects.computeIfPresent(key, (existing, stored) -> new StoredObject(stored.content(), lastModified));
+        objects.computeIfPresent(key, (existing, stored) -> new StoredObject(stored.content(), lastModified, stored.contentType(), stored.metadata()));
     }
 
     public Set<String> keys() {
@@ -72,16 +76,18 @@ public final class InMemoryS3Client implements S3Client {
     @Override
     public HeadObjectResponse headObject(HeadObjectRequest request) {
         count(HEAD);
-        if (!objects.containsKey(request.key()))
+        StoredObject stored = objects.get(request.key());
+        if (stored == null)
             throw NoSuchKeyException.builder().message("Not found: " + request.key()).build();
-        return HeadObjectResponse.builder().build();
+        return HeadObjectResponse.builder().contentType(stored.contentType()).metadata(stored.metadata()).build();
     }
 
     @Override
     public PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {
         count(PUT);
         try {
-            objects.put(request.key(), new StoredObject(body.contentStreamProvider().newStream().readAllBytes(), Instant.now()));
+            objects.put(request.key(), new StoredObject(body.contentStreamProvider().newStream().readAllBytes(), Instant.now(),
+                    request.contentType(), Map.copyOf(request.metadata())));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
@@ -94,13 +100,15 @@ public final class InMemoryS3Client implements S3Client {
         StoredObject stored = objects.get(request.key());
         if (stored == null)
             throw NoSuchKeyException.builder().message("Not found: " + request.key()).build();
-        return ResponseBytes.fromByteArray(GetObjectResponse.builder().build(), stored.content());
+        return ResponseBytes.fromByteArray(GetObjectResponse.builder().contentType(stored.contentType()).metadata(stored.metadata()).build(),
+                stored.content());
     }
 
     @Override
     public CopyObjectResponse copyObject(CopyObjectRequest request) {
         count(COPY);
-        objects.put(request.destinationKey(), new StoredObject(objects.get(request.sourceKey()).content(), Instant.now()));
+        StoredObject source = objects.get(request.sourceKey());
+        objects.put(request.destinationKey(), new StoredObject(source.content(), Instant.now(), source.contentType(), source.metadata()));
         return CopyObjectResponse.builder().build();
     }
 

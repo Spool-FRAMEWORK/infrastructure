@@ -6,6 +6,7 @@ import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.EventMetadataKey;
 import software.spool.core.model.vo.IdempotencyKey;
+import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.model.vo.PartitionedEnvelope;
 import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
@@ -71,6 +72,17 @@ public abstract class DataLakeContract {
     }
 
     @Test
+    void write_binaryEnvelope_keepsItsBytesAndItsMediaType() throws Exception {
+        byte[] pdf = {0x25, 0x50, 0x44, 0x46, (byte) 0xe2, (byte) 0xe3, 0x00, 0x0a};
+        writer().write(List.of(new PartitionedEnvelope(PARTITION, envelope(MediaTypes.PDF, pdf)))).toList();
+
+        assertThat(find(PARTITION, KEY)).hasValueSatisfying(found -> {
+            assertThat(found.payload()).isEqualTo(pdf);
+            assertThat(found.mediaType()).isEqualTo(MediaTypes.PDF);
+        });
+    }
+
+    @Test
     void remove_envelopeThatIsNotThere_doesNothing() {
         assertThatCode(() -> remover().remove(PARTITION, KEY)).doesNotThrowAnyException();
     }
@@ -80,7 +92,11 @@ public abstract class DataLakeContract {
     }
 
     private static Envelope envelope(String payload) {
-        return new Envelope(KEY, new EventMetadata().set(EventMetadataKey.SOURCE, "boe"), MediaTypes.JSON,
-                payload.getBytes(StandardCharsets.UTF_8), EnvelopeStatus.PERSISTED, 0, NOW, NOW);
+        return envelope(MediaTypes.JSON, payload.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static Envelope envelope(MediaType mediaType, byte[] payload) {
+        return new Envelope(KEY, new EventMetadata().set(EventMetadataKey.SOURCE, "boe"), mediaType,
+                payload, EnvelopeStatus.PERSISTED, 0, NOW, NOW);
     }
 }

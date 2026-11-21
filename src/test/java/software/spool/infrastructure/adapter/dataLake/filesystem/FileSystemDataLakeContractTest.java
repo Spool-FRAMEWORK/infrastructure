@@ -3,8 +3,8 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 import org.junit.jupiter.api.io.TempDir;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.model.vo.Envelope;
+import software.spool.core.model.vo.EnvelopeHeader;
 import software.spool.core.model.vo.IdempotencyKey;
-import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
 import software.spool.core.port.datalake.DataLakeWriter;
@@ -31,9 +31,10 @@ class FileSystemDataLakeContractTest extends DataLakeContract {
 
     @Override
     protected Optional<Envelope> find(PartitionKey partition, IdempotencyKey idempotencyKey) throws Exception {
-        Path file = directory.resolve("bronze").resolve(String.join("/", KeyEntries.split(partition.value())))
-                .resolve(idempotencyKey.value() + ".json");
-        if (!Files.exists(file)) return Optional.empty();
-        return Optional.of(PayloadDeserializerFactory.json().as(Envelope.class).deserialize(Files.readAllBytes(file)));
+        FileSystemDataLakeLayout layout = new FileSystemDataLakeLayout(directory.toString());
+        Path headerFile = layout.headerFileOf(partition, idempotencyKey);
+        if (!Files.exists(headerFile)) return Optional.empty();
+        EnvelopeHeader header = PayloadDeserializerFactory.json().as(EnvelopeHeader.class).deserialize(Files.readAllBytes(headerFile));
+        return Optional.of(Envelope.of(header, Files.readAllBytes(layout.payloadFileOf(partition, header))));
     }
 }

@@ -1,11 +1,12 @@
 package software.spool.infrastructure.adapter.dataLake.s3;
 
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.model.vo.Envelope;
+import software.spool.core.model.vo.EnvelopeHeader;
 import software.spool.core.model.vo.IdempotencyKey;
-import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
 import software.spool.core.port.datalake.DataLakeWriter;
@@ -32,12 +33,20 @@ class S3DataLakeContractTest extends DataLakeContract {
 
     @Override
     protected Optional<Envelope> find(PartitionKey partition, IdempotencyKey idempotencyKey) {
-        String key = "bronze/" + String.join("/", KeyEntries.split(partition.value())) + "/" + idempotencyKey.value();
-        try {
-            byte[] content = s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(BUCKET).key(key).build()).asByteArray();
-            return Optional.of(PayloadDeserializerFactory.json().as(Envelope.class).deserialize(content));
-        } catch (NoSuchKeyException e) {
-            return Optional.empty();
-        }
+        return s3Client.keys().stream()
+                .filter(key -> key.startsWith(S3DataLakeLayout.prefixOf(partition, idempotencyKey)))
+                .filter(key -> !key.equals(S3DataLakeLayout.headerKeyOf(partition, idempotencyKey)))
+                .findFirst()
+                .map(payloadKey -> {
+                    ResponseBytes<GetObjectResponse> payload = get(payloadKey);
+                    EnvelopeHeader header = S3EnvelopeHeaderMetadata.headerIn(payload.response().metadata())
+                            .orElseGet(() -> PayloadDeserializerFactory.json().as(EnvelopeHeader.class)
+                                    .deserialize(get(S3DataLakeLayout.headerKeyOf(partition, idempotencyKey)).asByteArray()));
+                    return Envelope.of(header, payload.asByteArray());
+                });
+    }
+
+    private ResponseBytes<GetObjectResponse> get(String key) {
+        return s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(BUCKET).key(key).build());
     }
 }

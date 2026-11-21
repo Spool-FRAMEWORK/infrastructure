@@ -71,7 +71,7 @@ class FileSystemBronzeValidationIntegrationTest {
         assertThat(promoted).extracting(record -> record.record().getNested("payload").getString("id"))
                 .containsExactly("payment-1");
         assertThat(quarantineRepository.find(IdempotencyKey.of("payment-2"))).isPresent();
-        assertThat(bronzeFileNames()).containsExactly("payment-1.json");
+        assertThat(bronzeFileNames()).containsExactlyInAnyOrder("payment-1.json", "payment-1.meta.json");
     }
 
     private ValidatingPartitionedReader validatingReader(FileSystemQuarantineRepository quarantineRepository) {
