@@ -41,9 +41,10 @@ public class FileSystemPartitionedReaderProvider implements PartitionedReaderPro
     private static PayloadDeserializer<GenericRecord> buildDeserializer() {
         return bytes -> {
             Map<String, Object> envelope = PayloadDeserializerFactory.json().asMap().deserialize(bytes);
-            String encoded = (String) envelope.get("payload");
-            byte[] decoded = Base64.getDecoder().decode(encoded);
-            envelope.put("payload", PayloadDeserializerFactory.json().asMap().deserialize(decoded));
+            if (envelope.get("payload") instanceof String encoded) {
+                byte[] decoded = Base64.getDecoder().decode(encoded);
+                envelope.put("payload", PayloadDeserializerFactory.json().asMap().deserialize(decoded));
+            }
             return GenericRecord.of(envelope);
         };
     }
