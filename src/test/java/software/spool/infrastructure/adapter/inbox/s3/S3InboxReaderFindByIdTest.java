@@ -47,7 +47,7 @@ class S3InboxReaderFindByIdTest {
 
         assertThat(found).isPresent();
         assertThat(found.get().status()).isEqualTo(EnvelopeStatus.PERSISTED);
-        assertThat(s3Client.requests(InMemoryS3Client.GET) - downloadsBefore).isEqualTo(3);
+        assertThat(s3Client.requests(InMemoryS3Client.GET) - downloadsBefore).isEqualTo(EnvelopeStatus.PERSISTED.ordinal() + 1);
         assertThat(s3Client.requests(InMemoryS3Client.LIST)).isZero();
     }
 

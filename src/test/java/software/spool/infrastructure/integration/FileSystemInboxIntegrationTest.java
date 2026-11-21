@@ -61,9 +61,9 @@ class FileSystemInboxIntegrationTest {
     }
 
     @Test
-    void writer_receive_duplicateKeyInIngested_throwsDuplicateEventException(@TempDir Path tmp) throws Exception {
-        String keyValue = "dup-in-ingested";
-        Path dir = tmp.resolve(EnvelopeStatus.INGESTED.name());
+    void writer_receive_duplicateKeyInPersisted_throwsDuplicateEventException(@TempDir Path tmp) throws Exception {
+        String keyValue = "dup-in-persisted";
+        Path dir = tmp.resolve(EnvelopeStatus.PERSISTED.name());
         Files.createDirectories(dir);
         Files.write(dir.resolve(keyValue + ".json"), new byte[0]);
 
@@ -88,9 +88,9 @@ class FileSystemInboxIntegrationTest {
         assertThat(Files.exists(capturedDir)).isFalse();
 
         String keyValue = "dir-creation-key";
-        Path ingestedDir = tmp.resolve(EnvelopeStatus.INGESTED.name());
-        Files.createDirectories(ingestedDir);
-        Files.write(ingestedDir.resolve(keyValue + ".json"), new byte[0]);
+        Path persistedDir = tmp.resolve(EnvelopeStatus.PERSISTED.name());
+        Files.createDirectories(persistedDir);
+        Files.write(persistedDir.resolve(keyValue + ".json"), new byte[0]);
 
         assertThatThrownBy(() -> new FileSystemInboxWriter(tmp.toString()).receive(mockEnvelope(keyValue)))
                 .isInstanceOf(DuplicateEventException.class);
@@ -101,14 +101,14 @@ class FileSystemInboxIntegrationTest {
     @Test
     void updater_update_keyNotFound_returnsEmptyCollection(@TempDir Path tmp) throws Exception {
         FileSystemInboxUpdater updater = new FileSystemInboxUpdater(tmp.toString());
-        Collection<Envelope> result = updater.update(List.of(mockKey("missing")), EnvelopeStatus.INGESTED);
+        Collection<Envelope> result = updater.update(List.of(mockKey("missing")), EnvelopeStatus.PERSISTED);
         assertThat(result).isEmpty();
     }
 
     @Test
     void updater_update_emptyKeys_returnsEmptyCollection(@TempDir Path tmp) throws Exception {
         FileSystemInboxUpdater updater = new FileSystemInboxUpdater(tmp.toString());
-        assertThat(updater.update(List.of(), EnvelopeStatus.INGESTED)).isEmpty();
+        assertThat(updater.update(List.of(), EnvelopeStatus.PERSISTED)).isEmpty();
     }
 
     @Test
