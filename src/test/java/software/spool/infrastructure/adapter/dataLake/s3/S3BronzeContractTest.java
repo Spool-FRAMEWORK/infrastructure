@@ -7,21 +7,27 @@ import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
-import software.spool.core.port.datalake.BronzeRepository;
-import software.spool.infrastructure.adapter.dataLake.BronzeRepositoryContract;
+import software.spool.core.port.datalake.BronzeEnvelopeRemover;
+import software.spool.core.port.datalake.BronzeWriter;
+import software.spool.infrastructure.adapter.dataLake.BronzeContract;
 import software.spool.infrastructure.adapter.s3.InMemoryS3Client;
 
 import java.util.Optional;
 
-class S3BronzeRepositoryContractTest extends BronzeRepositoryContract {
+class S3BronzeContractTest extends BronzeContract {
 
     private static final String BUCKET = "spool-datalake-test";
 
     private final InMemoryS3Client s3Client = new InMemoryS3Client();
 
     @Override
-    protected BronzeRepository repository() {
-        return new S3BronzeRepository(s3Client, BUCKET);
+    protected BronzeWriter writer() {
+        return new S3BronzeWriter(s3Client, BUCKET);
+    }
+
+    @Override
+    protected BronzeEnvelopeRemover remover() {
+        return new S3BronzeEnvelopeRemover(s3Client, BUCKET);
     }
 
     @Override

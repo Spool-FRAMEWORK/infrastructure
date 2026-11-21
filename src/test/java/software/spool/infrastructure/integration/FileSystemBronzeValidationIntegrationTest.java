@@ -12,7 +12,8 @@ import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.metrics.MetricsRegistry;
-import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemBronzeRepository;
+import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemBronzeEnvelopeRemover;
+import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemBronzeWriter;
 import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemPartitionedReaderProvider;
 import software.spool.infrastructure.adapter.quarantine.FileSystemQuarantineRepository;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
@@ -59,12 +60,12 @@ class FileSystemBronzeValidationIntegrationTest {
 
     @Test
     void read_bronzeOfTheFileSystem_passesTheValidPaymentAndQuarantinesTheOther() throws IOException {
-        FileSystemBronzeRepository bronze = new FileSystemBronzeRepository(dataLake.toString());
+        FileSystemBronzeWriter bronze = new FileSystemBronzeWriter(dataLake.toString());
         bronze.save(PARTITION, payment("payment-1", 10));
         bronze.save(PARTITION, payment("payment-2", -5));
         FileSystemQuarantineRepository quarantineRepository = new FileSystemQuarantineRepository(quarantine.toString());
 
-        List<PartitionedRecord<GenericRecord>> promoted = validatingReader(bronze, quarantineRepository).read(TARGET).toList();
+        List<PartitionedRecord<GenericRecord>> promoted = validatingReader(quarantineRepository).read(TARGET).toList();
 
         assertThat(promoted).extracting(record -> record.record().getNested("payload").getString("id"))
                 .containsExactly("payment-1");
@@ -72,13 +73,12 @@ class FileSystemBronzeValidationIntegrationTest {
         assertThat(bronzeFileNames()).containsExactly("payment-1.json");
     }
 
-    private ValidatingPartitionedReader validatingReader(FileSystemBronzeRepository bronze,
-                                                         FileSystemQuarantineRepository quarantineRepository) {
+    private ValidatingPartitionedReader validatingReader(FileSystemQuarantineRepository quarantineRepository) {
         return new ValidatingPartitionedReader(
                 new FileSystemPartitionedReaderProvider().create(PluginConfiguration.builder().with("path", dataLake.toString()).build()),
                 new EnvelopeValidator(new ValidatorRegistry(List.of(new NonNegativeAmountValidator()))),
                 quarantineRepository,
-                bronze,
+                new FileSystemBronzeEnvelopeRemover(dataLake.toString()),
                 new EventPublisher() {
                     @Override
                     public <E extends Event> void publish(E event) {

@@ -6,21 +6,27 @@ import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
-import software.spool.core.port.datalake.BronzeRepository;
-import software.spool.infrastructure.adapter.dataLake.BronzeRepositoryContract;
+import software.spool.core.port.datalake.BronzeEnvelopeRemover;
+import software.spool.core.port.datalake.BronzeWriter;
+import software.spool.infrastructure.adapter.dataLake.BronzeContract;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 
-class FileSystemBronzeRepositoryContractTest extends BronzeRepositoryContract {
+class FileSystemBronzeContractTest extends BronzeContract {
 
     @TempDir
     Path directory;
 
     @Override
-    protected BronzeRepository repository() {
-        return new FileSystemBronzeRepository(directory.toString());
+    protected BronzeWriter writer() {
+        return new FileSystemBronzeWriter(directory.toString());
+    }
+
+    @Override
+    protected BronzeEnvelopeRemover remover() {
+        return new FileSystemBronzeEnvelopeRemover(directory.toString());
     }
 
     @Override

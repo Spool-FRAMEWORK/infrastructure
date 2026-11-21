@@ -15,10 +15,10 @@ import java.util.stream.Stream;
 public class S3DataLakeWriter implements DataLakeWriter {
     private static final Logger LOG = LoggerFactory.getLogger(S3DataLakeWriter.class);
 
-    private final S3BronzeRepository bronze;
+    private final S3BronzeWriter bronze;
 
     public S3DataLakeWriter(S3Client s3Client, String bucket) {
-        this.bronze = new S3BronzeRepository(s3Client, bucket);
+        this.bronze = new S3BronzeWriter(s3Client, bucket);
     }
 
     @Override
