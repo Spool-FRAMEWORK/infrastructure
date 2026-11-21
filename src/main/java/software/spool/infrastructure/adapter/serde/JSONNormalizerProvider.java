@@ -1,20 +1,17 @@
 package software.spool.infrastructure.adapter.serde;
 
-import software.spool.core.adapter.jackson.*;
-import software.spool.core.pipeline.ObservedStep;
-import software.spool.core.pipeline.Pipeline;
-import software.spool.core.port.serde.EnrichmentRule;
-import software.spool.crawler.internal.utils.factory.Normalizer;
-import software.spool.crawler.internal.utils.factory.PayloadSplitterFactory;
-import software.spool.crawler.internal.utils.factory.steps.*;
+import software.spool.crawler.api.normalizer.NormalizerPlan;
+import software.spool.crawler.api.normalizer.StandardNormalizers;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
+import software.spool.infrastructure.spi.provider.serde.ExtendableNormalizerProvider;
 import software.spool.infrastructure.spi.provider.serde.NormalizerProvider;
 
-import java.util.List;
+import java.util.stream.Stream;
 
+/** The same normalizer as {@link JSONArrayNormalizerProvider}, under the media type {@code JSON}. */
 @SpoolPlugin(NormalizerProvider.class)
-public class JSONNormalizerProvider implements NormalizerProvider {
+public class JSONNormalizerProvider implements ExtendableNormalizerProvider {
     @Override
     public String name() {
         return "JSON_NORMALIZER";
@@ -31,20 +28,7 @@ public class JSONNormalizerProvider implements NormalizerProvider {
     }
 
     @Override
-    public Normalizer<?> create(PluginConfiguration configuration) {
-        List<EnrichmentRule> rules = rules(configuration);
-        String rootPath = configuration.require("rootPath");
-
-        return new Normalizer<>(Pipeline.<byte[]>start()
-                .add(new ObservedStep<>("deserialize",  new DeserializeStep<>(PayloadDeserializerFactory.json().asNode())))
-                .add(new ObservedStep<>("extract", new ExtractStep<>(PayloadExtractorFactory.withRules(rules))))
-                .add(new ObservedStep<>("context-locate", new ContextLocateStep<>(PayloadLocatorFactory.fromRootPath(rootPath))))
-                .add(new ObservedStep<>("split-enrich", new SplitEnrichStep<>(PayloadSplitterFactory.jsonArray(), RecordEnricherFactory.json())))
-                .add(new ObservedStep<>("serialize",    new SerializeStep<>(RecordSerializerFactory.jsonNode()))));
-    }
-
-    private static List<EnrichmentRule> rules(PluginConfiguration configuration) {
-        return PayloadDeserializerFactory.json().asList(EnrichmentRule.class)
-                .deserialize(configuration.require("rules").getBytes());
+    public NormalizerPlan<byte[], Stream<byte[]>> plan(PluginConfiguration configuration) {
+        return StandardNormalizers.jsonArray(EnrichmentRules.of(configuration), configuration.require("rootPath"));
     }
 }
