@@ -1,10 +1,14 @@
 package software.spool.infrastructure.adapter.quarantine;
 
 import org.junit.jupiter.api.Test;
+import software.spool.core.exception.QuarantineConflictException;
 import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.quarantine.QuarantineLocation;
+import software.spool.core.model.quarantine.QuarantinePage;
+import software.spool.core.model.quarantine.QuarantinePageRequest;
 import software.spool.core.model.quarantine.QuarantineReason;
 import software.spool.core.model.quarantine.QuarantineResolution;
+import software.spool.core.model.quarantine.Resolver;
 import software.spool.core.model.quarantine.QuarantineStatus;
 import software.spool.core.model.quarantine.QuarantinedRecord;
 import software.spool.core.model.vo.Envelope;
@@ -18,10 +22,17 @@ import software.spool.core.utils.media.MediaTypes;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Rules every {@link QuarantineRepository} adapter must follow.
@@ -32,6 +43,8 @@ public abstract class QuarantineRepositoryContract {
     private static final IdempotencyKey SECOND_KEY = IdempotencyKey.of("second-key");
     private static final Instant QUARANTINED_AT = Instant.now().truncatedTo(ChronoUnit.MILLIS);
     private static final Instant RESOLVED_AT = QUARANTINED_AT.plusSeconds(60);
+    private static final Resolver ANA = Resolver.identified("ana", "people");
+    private static final Resolver LUIS = Resolver.identified("luis", "people");
 
     protected abstract QuarantineRepository repository();
 
@@ -81,7 +94,7 @@ public abstract class QuarantineRepositoryContract {
     void save_resolvedRecord_isFoundByItsNewStatusAndNoLongerAsPending() {
         repository().save(validationRecord(FIRST_KEY));
 
-        repository().save(validationRecord(FIRST_KEY).resolve(QuarantineResolution.purged(RESOLVED_AT)));
+        repository().save(validationRecord(FIRST_KEY).resolve(QuarantineResolution.purged(RESOLVED_AT, Resolver.unknown())));
 
         assertThat(repository().findByStatus(QuarantineStatus.PENDING)).isEmpty();
         assertThat(repository().findByStatus(QuarantineStatus.PURGED)).extracting(QuarantinedRecord::idempotencyKey)
@@ -92,9 +105,9 @@ public abstract class QuarantineRepositoryContract {
     @Test
     void save_reopenedRecord_keepsItsWholeHistory() {
         QuarantinedRecord reopened = validationRecord(FIRST_KEY)
-                .resolve(QuarantineResolution.corrected(RESOLVED_AT, SECOND_KEY))
+                .resolve(QuarantineResolution.corrected(RESOLVED_AT, SECOND_KEY, Resolver.unknown()))
                 .reenter(QuarantineReason.RETRIES_EXHAUSTED, List.of(), RESOLVED_AT);
-        repository().save(validationRecord(FIRST_KEY).resolve(QuarantineResolution.corrected(RESOLVED_AT, SECOND_KEY)));
+        repository().save(validationRecord(FIRST_KEY).resolve(QuarantineResolution.corrected(RESOLVED_AT, SECOND_KEY, Resolver.unknown())));
 
         repository().save(reopened);
 
@@ -106,7 +119,7 @@ public abstract class QuarantineRepositoryContract {
     @Test
     void findByStatus_recordsInSeveralStatuses_returnsOnlyThoseInTheGivenOne() {
         repository().save(validationRecord(FIRST_KEY));
-        repository().save(retriesRecord(SECOND_KEY).resolve(QuarantineResolution.republished(RESOLVED_AT)));
+        repository().save(retriesRecord(SECOND_KEY).resolve(QuarantineResolution.republished(RESOLVED_AT, Resolver.unknown())));
 
         assertThat(repository().findByStatus(QuarantineStatus.PENDING)).extracting(QuarantinedRecord::idempotencyKey)
                 .containsExactly(FIRST_KEY);
@@ -117,7 +130,7 @@ public abstract class QuarantineRepositoryContract {
     @Test
     void findAll_twoSavedRecords_returnsBoth() {
         repository().save(validationRecord(FIRST_KEY));
-        repository().save(retriesRecord(SECOND_KEY).resolve(QuarantineResolution.republished(RESOLVED_AT)));
+        repository().save(retriesRecord(SECOND_KEY).resolve(QuarantineResolution.republished(RESOLVED_AT, Resolver.unknown())));
 
         assertThat(repository().findAll()).extracting(QuarantinedRecord::idempotencyKey)
                 .containsExactlyInAnyOrder(FIRST_KEY, SECOND_KEY);
@@ -136,7 +149,7 @@ public abstract class QuarantineRepositoryContract {
 
     @Test
     void delete_resolvedRecord_removesIt() {
-        repository().save(validationRecord(FIRST_KEY).resolve(QuarantineResolution.purged(RESOLVED_AT)));
+        repository().save(validationRecord(FIRST_KEY).resolve(QuarantineResolution.purged(RESOLVED_AT, Resolver.unknown())));
 
         repository().delete(FIRST_KEY);
 
@@ -148,6 +161,81 @@ public abstract class QuarantineRepositoryContract {
         repository().delete(FIRST_KEY);
 
         assertThat(repository().findAll()).isEmpty();
+    }
+
+    @Test
+    void resolve_pendingRecord_keepsItInItsNewStatusWithWhoResolvedIt() {
+        repository().save(validationRecord(FIRST_KEY));
+
+        repository().resolve(validationRecord(FIRST_KEY).resolve(QuarantineResolution.purged(RESOLVED_AT, ANA)));
+
+        assertThat(repository().find(FIRST_KEY)).hasValueSatisfying(found ->
+                assertThat(found.resolution()).isEqualTo(QuarantineResolution.purged(RESOLVED_AT, ANA)));
+        assertThat(repository().findByStatus(QuarantineStatus.PENDING)).isEmpty();
+    }
+
+    @Test
+    void resolve_recordAlreadyResolved_failsWithAConflictAndKeepsTheFirstResolution() {
+        repository().save(validationRecord(FIRST_KEY));
+        repository().resolve(validationRecord(FIRST_KEY).resolve(QuarantineResolution.purged(RESOLVED_AT, ANA)));
+
+        assertThatThrownBy(() -> repository().resolve(validationRecord(FIRST_KEY)
+                .resolve(QuarantineResolution.republished(RESOLVED_AT, LUIS))))
+                .isInstanceOf(QuarantineConflictException.class)
+                .hasMessageContaining(FIRST_KEY.value());
+        assertThat(repository().find(FIRST_KEY).orElseThrow().status()).isEqualTo(QuarantineStatus.PURGED);
+    }
+
+    @Test
+    void resolve_keyNotInQuarantine_failsWithAConflict() {
+        assertThatThrownBy(() -> repository().resolve(validationRecord(FIRST_KEY)
+                .resolve(QuarantineResolution.purged(RESOLVED_AT, ANA))))
+                .isInstanceOf(QuarantineConflictException.class);
+        assertThat(repository().find(FIRST_KEY)).isEmpty();
+    }
+
+    @Test
+    void resolve_sameRecordFromManyThreadsAtOnce_succeedsOnlyOnce() throws Exception {
+        repository().save(validationRecord(FIRST_KEY));
+        int attempts = 8;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService threads = Executors.newFixedThreadPool(attempts);
+        List<Future<Boolean>> results = new ArrayList<>();
+        for (int attempt = 0; attempt < attempts; attempt++) {
+            results.add(threads.submit(() -> {
+                start.await();
+                try {
+                    repository().resolve(validationRecord(FIRST_KEY).resolve(QuarantineResolution.purged(RESOLVED_AT, ANA)));
+                    return true;
+                } catch (QuarantineConflictException e) {
+                    return false;
+                }
+            }));
+        }
+        start.countDown();
+        int succeeded = 0;
+        for (Future<Boolean> result : results) {
+            if (result.get(10, TimeUnit.SECONDS)) succeeded++;
+        }
+        threads.shutdownNow();
+
+        assertThat(succeeded).isEqualTo(1);
+        assertThat(repository().find(FIRST_KEY).orElseThrow().history()).hasSize(1);
+    }
+
+    @Test
+    void findByStatus_page_returnsTheRecordsInKeyOrderAndTheKeyToGoOn() {
+        repository().save(validationRecord(SECOND_KEY));
+        repository().save(validationRecord(FIRST_KEY));
+        repository().save(validationRecord(IdempotencyKey.of("third-key")));
+
+        QuarantinePage first = repository().findByStatus(QuarantinePageRequest.first(QuarantineStatus.PENDING, 2));
+        QuarantinePage second = repository().findByStatus(
+                new QuarantinePageRequest(QuarantineStatus.PENDING, 2, first.next()));
+
+        assertThat(first.records()).extracting(QuarantinedRecord::idempotencyKey).containsExactly(FIRST_KEY, SECOND_KEY);
+        assertThat(second.records()).extracting(QuarantinedRecord::idempotencyKey).containsExactly(IdempotencyKey.of("third-key"));
+        assertThat(second.next()).isEmpty();
     }
 
     private static QuarantinedRecord validationRecord(IdempotencyKey idempotencyKey) {

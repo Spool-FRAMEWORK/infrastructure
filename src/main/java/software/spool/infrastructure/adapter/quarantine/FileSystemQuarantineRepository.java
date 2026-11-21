@@ -1,5 +1,9 @@
 package software.spool.infrastructure.adapter.quarantine;
 
+import java.nio.file.FileAlreadyExistsException;
+import software.spool.core.model.quarantine.QuarantinePageRequest;
+import software.spool.core.model.quarantine.QuarantinePage;
+import software.spool.core.exception.QuarantineConflictException;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.QuarantineRepositoryException;
@@ -21,10 +25,13 @@ import java.util.stream.Stream;
 
 /**
  * {@link QuarantineRepository} that keeps each record in a JSON file named after the envelope's idempotency key,
- * inside a folder named after the record's status. Resolving a record moves its file.
+ * inside a folder named after the record's status. Resolving a record moves its file. A resolution first claims the
+ * pending record by creating a claim file, which only one creation can do, and checks that it is still pending, so
+ * of two resolutions of the same record only one saves it.
  */
 public class FileSystemQuarantineRepository implements QuarantineRepository {
     private static final String FILE_EXTENSION = ".json";
+    private static final String CLAIM_SUFFIX = ".claimed";
 
     private final Path basePath;
     private final RecordSerializer<QuarantinedRecord> serializer = RecordSerializerFactory.record();
@@ -54,6 +61,34 @@ public class FileSystemQuarantineRepository implements QuarantineRepository {
     }
 
     @Override
+    public void resolve(QuarantinedRecord resolvedRecord) {
+        IdempotencyKey idempotencyKey = resolvedRecord.idempotencyKey();
+        Path pendingFile = fileOf(QuarantineStatus.PENDING, idempotencyKey);
+        Path claimFile = pendingFile.resolveSibling(fileNameOf(idempotencyKey) + CLAIM_SUFFIX);
+        try {
+            Files.createDirectories(pendingFile.getParent());
+            Files.createFile(claimFile);
+        } catch (FileAlreadyExistsException e) {
+            throw notPending(idempotencyKey);
+        } catch (IOException e) {
+            throw new QuarantineRepositoryException(
+                    "Quarantine record of " + idempotencyKey.value() + " could not be claimed in " + basePath, e);
+        }
+        try {
+            if (!Files.exists(pendingFile)) throw notPending(idempotencyKey);
+            Path statusFolder = folderOf(resolvedRecord.status());
+            Files.createDirectories(statusFolder);
+            Files.write(statusFolder.resolve(fileNameOf(idempotencyKey)), serializer.serialize(resolvedRecord));
+            Files.delete(pendingFile);
+        } catch (IOException e) {
+            throw new QuarantineRepositoryException(
+                    "Quarantine record of " + idempotencyKey.value() + " could not be resolved in " + basePath, e);
+        } finally {
+            release(claimFile);
+        }
+    }
+
+    @Override
     public Optional<QuarantinedRecord> find(IdempotencyKey idempotencyKey) {
         return Arrays.stream(QuarantineStatus.values())
                 .map(status -> fileOf(status, idempotencyKey))
@@ -76,6 +111,30 @@ public class FileSystemQuarantineRepository implements QuarantineRepository {
     }
 
     @Override
+    public QuarantinePage findByStatus(QuarantinePageRequest request) {
+        Path statusFolder = folderOf(request.status());
+        if (!Files.exists(statusFolder)) return new QuarantinePage(List.of(), Optional.empty());
+        List<String> keys;
+        try (Stream<Path> files = Files.list(statusFolder)) {
+            keys = files.map(file -> file.getFileName().toString())
+                    .filter(name -> name.endsWith(FILE_EXTENSION))
+                    .map(name -> name.substring(0, name.length() - FILE_EXTENSION.length()))
+                    .filter(key -> request.after().map(cursor -> key.compareTo(cursor.value()) > 0).orElse(true))
+                    .sorted()
+                    .limit(request.limit() + 1L)
+                    .toList();
+        } catch (IOException e) {
+            throw new QuarantineRepositoryException("Quarantine records could not be listed in " + statusFolder, e);
+        }
+        List<QuarantinedRecord> page = keys.stream().limit(request.limit())
+                .map(key -> read(statusFolder.resolve(key + FILE_EXTENSION)))
+                .toList();
+        return new QuarantinePage(page, keys.size() > request.limit()
+                ? Optional.of(page.getLast().idempotencyKey())
+                : Optional.empty());
+    }
+
+    @Override
     public Collection<QuarantinedRecord> findAll() {
         return Arrays.stream(QuarantineStatus.values())
                 .flatMap(status -> findByStatus(status).stream())
@@ -91,6 +150,20 @@ public class FileSystemQuarantineRepository implements QuarantineRepository {
         } catch (IOException e) {
             throw new QuarantineRepositoryException(
                     "Quarantine record of " + idempotencyKey.value() + " could not be deleted from " + basePath, e);
+        }
+    }
+
+    private QuarantineConflictException notPending(IdempotencyKey idempotencyKey) {
+        return new QuarantineConflictException(idempotencyKey, find(idempotencyKey)
+                .map(kept -> idempotencyKey.value() + " was already resolved as " + kept.status())
+                .orElse(idempotencyKey.value() + " is not in quarantine"));
+    }
+
+    private void release(Path claimFile) {
+        try {
+            Files.deleteIfExists(claimFile);
+        } catch (IOException e) {
+            throw new QuarantineRepositoryException("Claim " + claimFile + " could not be released, so its record cannot be resolved", e);
         }
     }
 

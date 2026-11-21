@@ -7,6 +7,7 @@ import software.spool.core.model.EnvelopeStatus;
 import software.spool.core.model.quarantine.QuarantineLocation;
 import software.spool.core.model.quarantine.QuarantineReason;
 import software.spool.core.model.quarantine.QuarantineResolution;
+import software.spool.core.model.quarantine.Resolver;
 import software.spool.core.model.quarantine.QuarantinedRecord;
 import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.EventMetadata;
@@ -46,7 +47,7 @@ class FileSystemQuarantineRepositoryContractTest extends QuarantineRepositoryCon
                 QuarantineLocation.inbox(), QuarantineReason.VALIDATION_FAILED, List.of(), now);
         repository.save(pending);
 
-        repository.save(pending.resolve(QuarantineResolution.republished(now)));
+        repository.save(pending.resolve(QuarantineResolution.republished(now, Resolver.unknown())));
 
         assertThat(quarantineDirectory().resolve("PENDING").resolve("k1.json")).doesNotExist();
         assertThat(quarantineDirectory().resolve("REPUBLISHED").resolve("k1.json")).exists();
