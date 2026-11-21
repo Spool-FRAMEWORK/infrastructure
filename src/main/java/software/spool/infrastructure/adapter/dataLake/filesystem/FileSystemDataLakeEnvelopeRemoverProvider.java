@@ -1,12 +1,12 @@
 package software.spool.infrastructure.adapter.dataLake.filesystem;
 
-import software.spool.core.port.datalake.BronzeEnvelopeRemover;
+import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
-import software.spool.infrastructure.spi.provider.dataLake.BronzeEnvelopeRemoverProvider;
+import software.spool.infrastructure.spi.provider.dataLake.DataLakeEnvelopeRemoverProvider;
 
-@SpoolPlugin(BronzeEnvelopeRemoverProvider.class)
-public class FileSystemBronzeEnvelopeRemoverProvider implements BronzeEnvelopeRemoverProvider {
+@SpoolPlugin(DataLakeEnvelopeRemoverProvider.class)
+public class FileSystemDataLakeEnvelopeRemoverProvider implements DataLakeEnvelopeRemoverProvider {
     @Override
     public String name() {
         return "FILE_SYSTEM";
@@ -23,7 +23,7 @@ public class FileSystemBronzeEnvelopeRemoverProvider implements BronzeEnvelopeRe
     }
 
     @Override
-    public BronzeEnvelopeRemover create(PluginConfiguration configuration) {
-        return new FileSystemBronzeEnvelopeRemover(configuration.require("path"));
+    public DataLakeEnvelopeRemover create(PluginConfiguration configuration) {
+        return new FileSystemDataLakeEnvelopeRemover(configuration.require("path"));
     }
 }

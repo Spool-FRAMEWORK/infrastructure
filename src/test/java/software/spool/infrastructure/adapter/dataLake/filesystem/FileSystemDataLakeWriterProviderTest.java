@@ -1,6 +1,6 @@
 package software.spool.infrastructure.adapter.dataLake.filesystem;
 
-import software.spool.ingester.api.port.DataLakeWriter;
+import software.spool.core.port.datalake.DataLakeWriter;
 import software.spool.infrastructure.support.AbstractPathBasedProviderTest;
 
 class FileSystemDataLakeWriterProviderTest extends AbstractPathBasedProviderTest<FileSystemDataLakeWriterProvider> {

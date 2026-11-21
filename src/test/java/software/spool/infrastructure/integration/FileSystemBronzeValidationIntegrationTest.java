@@ -12,8 +12,9 @@ import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.bus.EventPublisher;
 import software.spool.core.port.metrics.MetricsRegistry;
-import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemBronzeEnvelopeRemover;
-import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemBronzeWriter;
+import software.spool.core.model.vo.PartitionedEnvelope;
+import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemDataLakeEnvelopeRemover;
+import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemDataLakeWriter;
 import software.spool.infrastructure.adapter.dataLake.filesystem.FileSystemPartitionedReaderProvider;
 import software.spool.infrastructure.adapter.quarantine.FileSystemQuarantineRepository;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
@@ -60,9 +61,8 @@ class FileSystemBronzeValidationIntegrationTest {
 
     @Test
     void read_bronzeOfTheFileSystem_passesTheValidPaymentAndQuarantinesTheOther() throws IOException {
-        FileSystemBronzeWriter bronze = new FileSystemBronzeWriter(dataLake.toString());
-        bronze.save(PARTITION, payment("payment-1", 10));
-        bronze.save(PARTITION, payment("payment-2", -5));
+        new FileSystemDataLakeWriter(dataLake.toString()).write(List.of(new PartitionedEnvelope(PARTITION, payment("payment-1", 10)),
+                new PartitionedEnvelope(PARTITION, payment("payment-2", -5)))).toList();
         FileSystemQuarantineRepository quarantineRepository = new FileSystemQuarantineRepository(quarantine.toString());
 
         List<PartitionedRecord<GenericRecord>> promoted = validatingReader(quarantineRepository).read(TARGET).toList();
@@ -78,7 +78,7 @@ class FileSystemBronzeValidationIntegrationTest {
                 new FileSystemPartitionedReaderProvider().create(PluginConfiguration.builder().with("path", dataLake.toString()).build()),
                 new EnvelopeValidator(new ValidatorRegistry(List.of(new NonNegativeAmountValidator()))),
                 quarantineRepository,
-                new FileSystemBronzeEnvelopeRemover(dataLake.toString()),
+                new FileSystemDataLakeEnvelopeRemover(dataLake.toString()),
                 new EventPublisher() {
                     @Override
                     public <E extends Event> void publish(E event) {

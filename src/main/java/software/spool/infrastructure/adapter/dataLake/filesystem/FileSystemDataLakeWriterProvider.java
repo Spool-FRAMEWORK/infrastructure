@@ -3,7 +3,7 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.dataLake.DataLakeWriterProvider;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
-import software.spool.ingester.api.port.DataLakeWriter;
+import software.spool.core.port.datalake.DataLakeWriter;
 
 @SpoolPlugin(DataLakeWriterProvider.class)
 public class FileSystemDataLakeWriterProvider implements DataLakeWriterProvider {

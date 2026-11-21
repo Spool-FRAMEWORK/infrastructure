@@ -7,16 +7,16 @@ import software.spool.core.model.vo.PartitionKey;
 import java.nio.file.Path;
 
 /**
- * Where the bronze layer keeps each envelope: {@code bronze/<partition>/<key>.json} under the data lake root, one
- * folder per partition entry.
+ * Where the data lake keeps each envelope: {@code bronze/<partition>/<key>.json} under its root, one folder per
+ * partition entry.
  */
-final class FileSystemBronzeLayout {
+final class FileSystemDataLakeLayout {
     private static final String LAYER = "bronze";
     private static final String FILE_EXTENSION = ".json";
 
     private final Path basePath;
 
-    FileSystemBronzeLayout(String basePath) {
+    FileSystemDataLakeLayout(String basePath) {
         this.basePath = Path.of(basePath);
     }
 

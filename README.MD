@@ -182,8 +182,7 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Inbox, update | `InboxUpdaterProvider` | `FILE_SYSTEM`, `S3` | same as the inbox writer |
 | Inbox, remove | `InboxEnvelopeRemoverProvider` | `FILE_SYSTEM`, `S3` | same as the inbox writer |
 | Data lake, write | `DataLakeWriterProvider` | `FILE_SYSTEM`, `S3` | `FILE_SYSTEM`: `path`. `S3`: `bucket`, `region`, `endpoint` |
-| Data lake, bronze write | `BronzeWriterProvider` | `FILE_SYSTEM`, `S3` | same as the data lake writer |
-| Data lake, bronze remove | `BronzeEnvelopeRemoverProvider` | `FILE_SYSTEM`, `S3` | same as the data lake writer |
+| Data lake, remove | `DataLakeEnvelopeRemoverProvider` | `FILE_SYSTEM`, `S3` | same as the data lake writer |
 | Data lake, read partitions | `PartitionedReaderProvider` | `FILE_SYSTEM` | `path`, `payload` |
 | Data mart, write | `DataMartWriterProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM` | `path` |
 | Quarantine | `QuarantineRepositoryProvider` | `FILE_SYSTEM` | `path` |

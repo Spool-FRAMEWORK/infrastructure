@@ -7,23 +7,25 @@ import software.spool.core.model.vo.EventMetadata;
 import software.spool.core.model.vo.EventMetadataKey;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.PartitionKey;
-import software.spool.core.port.datalake.BronzeEnvelopeRemover;
-import software.spool.core.port.datalake.BronzeWriter;
+import software.spool.core.model.vo.PartitionedEnvelope;
+import software.spool.core.port.datalake.DataLakeEnvelopeRemover;
+import software.spool.core.port.datalake.DataLakeWriter;
 import software.spool.core.utils.media.MediaTypes;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * Rules every bronze adapter must follow: its {@link BronzeWriter} and its {@link BronzeEnvelopeRemover} work on the
- * same envelopes.
+ * Rules every data lake adapter must follow: its {@link DataLakeWriter} and its {@link DataLakeEnvelopeRemover} work
+ * on the same envelopes.
  */
-public abstract class BronzeContract {
+public abstract class DataLakeContract {
 
     protected static final PartitionKey PARTITION = PartitionKey.ofEntriesWithoutDate().with("year", "2026")
             .with("source", "boe").build();
@@ -32,15 +34,15 @@ public abstract class BronzeContract {
     private static final IdempotencyKey KEY = IdempotencyKey.of("k1");
     private static final Instant NOW = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
-    protected abstract BronzeWriter writer();
+    protected abstract DataLakeWriter writer();
 
-    protected abstract BronzeEnvelopeRemover remover();
+    protected abstract DataLakeEnvelopeRemover remover();
 
     protected abstract Optional<Envelope> find(PartitionKey partition, IdempotencyKey idempotencyKey) throws Exception;
 
     @Test
-    void save_envelope_isFoundInItsPartitionWithItsContent() throws Exception {
-        writer().save(PARTITION, envelope("{\"price\":10}"));
+    void write_envelope_returnsItsKeyAndIsFoundInItsPartitionWithItsContent() throws Exception {
+        assertThat(write(PARTITION, "{\"price\":10}")).containsExactly(KEY);
 
         assertThat(find(PARTITION, KEY)).hasValueSatisfying(found -> {
             assertThat(found.payload()).isEqualTo("{\"price\":10}".getBytes(StandardCharsets.UTF_8));
@@ -50,17 +52,17 @@ public abstract class BronzeContract {
     }
 
     @Test
-    void save_sameKeyTwice_keepsTheLastContent() throws Exception {
-        writer().save(PARTITION, envelope("{\"price\":10}"));
-        writer().save(PARTITION, envelope("{\"price\":20}"));
+    void write_sameKeyTwice_keepsTheLastContent() throws Exception {
+        write(PARTITION, "{\"price\":10}");
+        write(PARTITION, "{\"price\":20}");
 
         assertThat(find(PARTITION, KEY)).map(Envelope::payload).contains("{\"price\":20}".getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
-    void remove_savedEnvelope_removesItOnlyFromThatPartition() throws Exception {
-        writer().save(PARTITION, envelope("{\"price\":10}"));
-        writer().save(OTHER_PARTITION, envelope("{\"price\":10}"));
+    void remove_writtenEnvelope_removesItOnlyFromThatPartition() throws Exception {
+        write(PARTITION, "{\"price\":10}");
+        write(OTHER_PARTITION, "{\"price\":10}");
 
         remover().remove(PARTITION, KEY);
 
@@ -71,6 +73,10 @@ public abstract class BronzeContract {
     @Test
     void remove_envelopeThatIsNotThere_doesNothing() {
         assertThatCode(() -> remover().remove(PARTITION, KEY)).doesNotThrowAnyException();
+    }
+
+    private List<IdempotencyKey> write(PartitionKey partition, String payload) {
+        return writer().write(List.of(new PartitionedEnvelope(partition, envelope(payload)))).toList();
     }
 
     private static Envelope envelope(String payload) {

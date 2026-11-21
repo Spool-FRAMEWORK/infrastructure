@@ -5,12 +5,12 @@ import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 
 /**
- * Where the bronze layer keeps each envelope: the object {@code bronze/<partition>/<key>} of a bucket.
+ * Where the data lake keeps each envelope: the object {@code bronze/<partition>/<key>} of a bucket.
  */
-final class S3BronzeLayout {
+final class S3DataLakeLayout {
     private static final String LAYER = "bronze";
 
-    private S3BronzeLayout() {
+    private S3DataLakeLayout() {
     }
 
     static String objectKeyOf(PartitionKey partition, IdempotencyKey idempotencyKey) {

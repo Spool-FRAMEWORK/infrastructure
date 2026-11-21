@@ -4,7 +4,7 @@ import software.spool.infrastructure.adapter.s3.S3ClientFactory;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.dataLake.DataLakeWriterProvider;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
-import software.spool.ingester.api.port.DataLakeWriter;
+import software.spool.core.port.datalake.DataLakeWriter;
 
 @SpoolPlugin(DataLakeWriterProvider.class)
 public class S3DataLakeWriterProvider implements DataLakeWriterProvider {
