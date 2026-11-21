@@ -21,6 +21,7 @@ import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedRecord;
+import software.spool.mounter.internal.quarantine.DataLakeRecordQuarantine;
 import software.spool.mounter.internal.validation.ValidatingPartitionedReader;
 import software.spool.validator.api.EnvelopeValidator;
 import software.spool.validator.api.Validate;
@@ -77,14 +78,14 @@ class FileSystemBronzeValidationIntegrationTest {
         return new ValidatingPartitionedReader(
                 new FileSystemPartitionedReaderProvider().create(PluginConfiguration.builder().with("path", dataLake.toString()).build()),
                 new EnvelopeValidator(new ValidatorRegistry(List.of(new NonNegativeAmountValidator()))),
-                quarantineRepository,
-                new FileSystemDataLakeEnvelopeRemover(dataLake.toString()),
-                new EventPublisher() {
-                    @Override
-                    public <E extends Event> void publish(E event) {
-                    }
-                },
-                MetricsRegistry.NOOP.counter("rejected", "rejected", "1"));
+                new DataLakeRecordQuarantine(quarantineRepository,
+                        new FileSystemDataLakeEnvelopeRemover(dataLake.toString()),
+                        new EventPublisher() {
+                            @Override
+                            public <E extends Event> void publish(E event) {
+                            }
+                        },
+                        MetricsRegistry.NOOP.counter("rejected", "rejected", "1")));
     }
 
     private List<String> bronzeFileNames() throws IOException {
