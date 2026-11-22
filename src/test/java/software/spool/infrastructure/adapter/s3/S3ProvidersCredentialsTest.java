@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Named;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import software.spool.infrastructure.adapter.dataLake.s3.S3DataLakeWriterProvider;
+import software.spool.infrastructure.adapter.dataLake.s3.S3PartitionedReaderProvider;
 import software.spool.infrastructure.adapter.inbox.s3.S3InboxEnvelopeRemoverProvider;
 import software.spool.infrastructure.adapter.inbox.s3.S3InboxReaderProvider;
 import software.spool.infrastructure.adapter.inbox.s3.S3InboxUpdaterProvider;
@@ -24,7 +25,8 @@ class S3ProvidersCredentialsTest {
                 Named.of("S3InboxReaderProvider", configuration -> new S3InboxReaderProvider().create(configuration)),
                 Named.of("S3InboxUpdaterProvider", configuration -> new S3InboxUpdaterProvider().create(configuration)),
                 Named.of("S3InboxEnvelopeRemoverProvider", configuration -> new S3InboxEnvelopeRemoverProvider().create(configuration)),
-                Named.of("S3DataLakeWriterProvider", configuration -> new S3DataLakeWriterProvider().create(configuration)));
+                Named.of("S3DataLakeWriterProvider", configuration -> new S3DataLakeWriterProvider().create(configuration)),
+                Named.of("S3PartitionedReaderProvider", configuration -> new S3PartitionedReaderProvider().create(configuration)));
     }
 
     private static PluginConfiguration.Builder configuration() {
