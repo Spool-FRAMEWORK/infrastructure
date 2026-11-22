@@ -24,6 +24,6 @@ public class PostgreSqlEnvelopeHeaderWriterProvider implements EnvelopeHeaderWri
 
     @Override
     public EnvelopeHeaderWriter create(PluginConfiguration configuration) {
-        return PostgreSqlEnvelopeHeaderStores.of(configuration);
+        return PostgreSqlEnvelopeHeaderStores.storeOf(configuration);
     }
 }

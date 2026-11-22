@@ -24,6 +24,6 @@ public class PostgreSqlEnvelopeHeaderRemoverProvider implements EnvelopeHeaderRe
 
     @Override
     public EnvelopeHeaderRemover create(PluginConfiguration configuration) {
-        return PostgreSqlEnvelopeHeaderStores.of(configuration);
+        return PostgreSqlEnvelopeHeaderStores.storeOf(configuration);
     }
 }

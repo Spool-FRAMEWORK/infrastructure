@@ -24,6 +24,6 @@ public class PostgreSqlEnvelopeHeaderReaderProvider implements EnvelopeHeaderRea
 
     @Override
     public EnvelopeHeaderReader create(PluginConfiguration configuration) {
-        return PostgreSqlEnvelopeHeaderStores.of(configuration);
+        return PostgreSqlEnvelopeHeaderStores.storeOf(configuration);
     }
 }

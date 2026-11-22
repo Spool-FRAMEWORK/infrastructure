@@ -209,7 +209,7 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Normalizer (media type) | `NormalizerProvider` | `JSON`, `JSON_ARRAY`, `JSON_OBJECT`, `EVENT_CLASS`, `EVENT_CLASS_ARRAY`, `PDF` | `rootPath`, `rules`, set by the crawler |
 | Error router | `ErrorRouterProvider` | `DEFAULT` | none |
 | Terraform of a piece | `ProvisioningProvider` | `IN_MEMORY`, `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA` | the configuration of the piece: see below |
-| Health check of a piece | `HealthProbeProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA` | the configuration of the piece |
+| Health check of a piece | `HealthProbeProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA`, `POSTGRESQL` | the configuration of the piece |
 | Authentication | `RequestAuthenticatorProvider` | `OIDC`, `HMAC_SIGNATURE` | `OIDC`: `issuer`, `audience`, `jwksUri` and `rolesClaim` optional. `HMAC_SIGNATURE`: `header`, `secret`, `timestampHeader`, `tolerance` and `roles` optional |
 
 The `S3` adapters also read `accessKeyEnv` and `secretKeyEnv`, the names of the environment variables with the
@@ -228,7 +228,8 @@ A `ProvisioningProvider` generates the Terraform of the pieces of its type for `
 A `HealthProbeProvider` builds the check of the pieces of its type, used in the health of the modules
 ([ADR-030](https://linear.app/javier-castilla/document/adr-030-la-salud-de-un-modulo-sale-de-cada-pieza-de-infraestructura-abe3aade918e)):
 `FILE_SYSTEM` and `RAW_FILE_SYSTEM` write and delete an empty file in the folder, `S3` lists a single key of the
-bucket and `KAFKA` asks the brokers for the id of their cluster. None of them changes what the piece keeps.
+bucket, `KAFKA` asks the brokers for the id of their cluster and `POSTGRESQL` reads a single row of the table, with
+the pool of connections of its store and a limit of 5 seconds. None of them changes what the piece keeps.
 
 The inbox, the data lake and the data mart are files or S3 objects. The only relational backend is the `POSTGRESQL`
 store of envelope headers

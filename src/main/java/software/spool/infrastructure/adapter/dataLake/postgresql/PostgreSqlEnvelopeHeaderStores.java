@@ -2,6 +2,7 @@ package software.spool.infrastructure.adapter.dataLake.postgresql;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import software.spool.core.port.health.HealthProbe;
 import software.spool.infrastructure.spi.provider.InvalidPluginConfigurationException;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 
@@ -11,7 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Builds the PostgreSQL store of envelope headers that a configuration describes, once per configuration, so the
- * writer, the reader and the remover of the same piece share one store and one pool of connections.
+ * writer, the reader, the remover and the health check of the same piece share one store and one pool of
+ * connections.
  *
  * <p>{@value #URL} is the JDBC URL of the database and is required. {@value #USER} and {@value #PASSWORD} are the
  * credentials, {@value #TABLE} the table, {@value #DEFAULT_TABLE} when it is not given, and {@value #POOL_SIZE} how
@@ -28,23 +30,36 @@ final class PostgreSqlEnvelopeHeaderStores {
     static final int DEFAULT_POOL_SIZE = 4;
     private static final String POSTGRESQL_URL_PREFIX = "jdbc:postgresql:";
 
-    private static final Map<Settings, PostgreSqlEnvelopeHeaderStore> STORES = new ConcurrentHashMap<>();
+    private static final Map<Settings, Piece> PIECES = new ConcurrentHashMap<>();
 
     private PostgreSqlEnvelopeHeaderStores() {
     }
 
-    static PostgreSqlEnvelopeHeaderStore of(PluginConfiguration configuration) {
-        return STORES.computeIfAbsent(Settings.of(configuration), PostgreSqlEnvelopeHeaderStores::create);
+    static PostgreSqlEnvelopeHeaderStore storeOf(PluginConfiguration configuration) {
+        return pieceOf(configuration).store();
     }
 
-    private static PostgreSqlEnvelopeHeaderStore create(Settings settings) {
+    static HealthProbe healthProbeOf(PluginConfiguration configuration) {
+        Piece piece = pieceOf(configuration);
+        return new PostgreSqlHealthProbe(piece.dataSource(), piece.table(), PostgreSqlHealthProbe.DEFAULT_TIMEOUT);
+    }
+
+    private static Piece pieceOf(PluginConfiguration configuration) {
+        return PIECES.computeIfAbsent(Settings.of(configuration), PostgreSqlEnvelopeHeaderStores::create);
+    }
+
+    private static Piece create(Settings settings) {
         HikariConfig pool = new HikariConfig();
         pool.setJdbcUrl(settings.url());
         settings.user().ifPresent(pool::setUsername);
         settings.password().ifPresent(pool::setPassword);
         pool.setMaximumPoolSize(settings.poolSize());
         pool.setPoolName("spool-envelope-headers-" + settings.table());
-        return new PostgreSqlEnvelopeHeaderStore(new HikariDataSource(pool), settings.table());
+        HikariDataSource dataSource = new HikariDataSource(pool);
+        return new Piece(dataSource, settings.table(), new PostgreSqlEnvelopeHeaderStore(dataSource, settings.table()));
+    }
+
+    private record Piece(HikariDataSource dataSource, String table, PostgreSqlEnvelopeHeaderStore store) {
     }
 
     private record Settings(String url, Optional<String> user, Optional<String> password,

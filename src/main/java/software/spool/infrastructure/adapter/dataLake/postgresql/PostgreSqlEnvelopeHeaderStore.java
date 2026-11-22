@@ -25,7 +25,6 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -34,21 +33,17 @@ import java.util.stream.Stream;
  * own, to query them with SQL.
  */
 public class PostgreSqlEnvelopeHeaderStore implements EnvelopeHeaderWriter, EnvelopeHeaderReader, EnvelopeHeaderRemover {
-    private static final Pattern PLAIN_IDENTIFIER = Pattern.compile("[a-z_][a-z0-9_]{0,62}");
     private static final String ENTRY_SEPARATOR = "::";
     private static final char LIKE_ESCAPE = '\\';
 
     private final DataSource dataSource;
-    private final String table;
+    private final TableName table;
     private final RecordSerializer<EnvelopeHeader> serializer = RecordSerializerFactory.record();
     private final PayloadDeserializer<EnvelopeHeader> deserializer = PayloadDeserializerFactory.json().as(EnvelopeHeader.class);
 
     public PostgreSqlEnvelopeHeaderStore(DataSource dataSource, String table) {
-        if (!PLAIN_IDENTIFIER.matcher(table).matches())
-            throw new IllegalArgumentException("Table name " + table
-                    + " is not valid: it must start with a lowercase letter or an underscore and have only lowercase letters, digits and underscores, up to 63 characters");
+        this.table = new TableName(table);
         this.dataSource = dataSource;
-        this.table = table;
         createTableIfMissing();
     }
 
