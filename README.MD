@@ -208,7 +208,7 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Stream source | `StreamSourceProvider` | `IN_MEMORY` | `sourceId`, `eventClassName` |
 | Normalizer (media type) | `NormalizerProvider` | `JSON`, `JSON_ARRAY`, `JSON_OBJECT`, `EVENT_CLASS`, `EVENT_CLASS_ARRAY`, `PDF` | `rootPath`, `rules`, set by the crawler |
 | Error router | `ErrorRouterProvider` | `DEFAULT` | none |
-| Terraform of a piece | `ProvisioningProvider` | `IN_MEMORY`, `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA` | the configuration of the piece: see below |
+| Terraform of a piece | `ProvisioningProvider` | `IN_MEMORY`, `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA`, `POSTGRESQL` | the configuration of the piece: see below |
 | Health check of a piece | `HealthProbeProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA`, `POSTGRESQL` | the configuration of the piece |
 | Authentication | `RequestAuthenticatorProvider` | `OIDC`, `HMAC_SIGNATURE` | `OIDC`: `issuer`, `audience`, `jwksUri` and `rolesClaim` optional. `HMAC_SIGNATURE`: `header`, `secret`, `timestampHeader`, `tolerance` and `roles` optional |
 
@@ -224,6 +224,7 @@ A `ProvisioningProvider` generates the Terraform of the pieces of its type for `
 | `FILE_SYSTEM`, `RAW_FILE_SYSTEM` | Nothing | Cannot be generated |
 | `S3` | A bucket in a LocalStack container that every S3 piece shares, on the port of `endpoint` | An encrypted bucket closed to the public, and object access for the modules that use it |
 | `KAFKA` | A broker in a container, on the port of the first of `bootstrap.servers` | Cannot be generated yet |
+| `POSTGRESQL` | A database in a container of its own, on the port and with the database of `url`, for `user`; `password` has to be `${env:NAME}` | Cannot be generated yet |
 
 A `HealthProbeProvider` builds the check of the pieces of its type, used in the health of the modules
 ([ADR-030](https://linear.app/javier-castilla/document/adr-030-la-salud-de-un-modulo-sale-de-cada-pieza-de-infraestructura-abe3aade918e)):

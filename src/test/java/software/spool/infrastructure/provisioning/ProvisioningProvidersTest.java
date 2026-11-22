@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import software.spool.infrastructure.PluginResolver;
+import software.spool.infrastructure.spi.provider.InvalidPluginConfigurationException;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.infrastructure.spi.provider.provisioning.ProvisioningProvider;
 
@@ -11,16 +12,19 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.LIST;
 
 class ProvisioningProvidersTest {
     private static final Map<String, String> BUCKET = Map.of("bucket", "spool-lake", "region", "eu-west-1",
             "endpoint", "http://localhost:4570");
+    private static final Map<String, String> HEADERS = Map.of("url", "jdbc:postgresql://localhost:5433/orders",
+            "user", "spool", "password", "${var.SPOOL_HEADERS_PASSWORD}");
 
     @Test
     void available_hasAProviderForEveryTypeOfTheFramework() {
         assertThat(PluginResolver.available(ProvisioningProvider.class).keySet())
-                .contains("S3", "KAFKA", "IN_MEMORY", "FILE_SYSTEM", "RAW_FILE_SYSTEM");
+                .contains("S3", "KAFKA", "IN_MEMORY", "FILE_SYSTEM", "RAW_FILE_SYSTEM", "POSTGRESQL");
     }
 
     @Test
@@ -82,6 +86,50 @@ class ProvisioningProvidersTest {
 
         assertThat(provisioning.forTarget(ProvisioningTarget.LOCAL)).contains(TerraformFragment.empty());
         assertThat(provisioning.forTarget(ProvisioningTarget.AWS)).isEmpty();
+    }
+
+    @Test
+    void postgresql_locally_isADatabaseInAContainerOnThePortOfTheUrl() {
+        TerraformFragment fragment = provision("POSTGRESQL", "headers", HEADERS, ProvisioningTarget.LOCAL);
+
+        Map<String, Object> container = fragment.resources().get("docker_container").get("headers");
+        assertThat(container.get("ports")).isEqualTo(List.of(Map.of("internal", 5432, "external", 5433)));
+        assertThat(container.get("env")).asInstanceOf(LIST).containsExactlyInAnyOrder(
+                "POSTGRES_DB=orders", "POSTGRES_USER=spool", "POSTGRES_PASSWORD=${var.SPOOL_HEADERS_PASSWORD}");
+        assertThat(container).containsEntry("wait", true).containsKey("healthcheck");
+        assertThat(fragment.resources().get("docker_image")).containsKey("postgres");
+    }
+
+    @Test
+    void postgresql_withoutPortDatabaseOrUser_usesTheOnesOfPostgreSql() {
+        TerraformFragment fragment = provision("POSTGRESQL", "headers",
+                Map.of("url", "jdbc:postgresql://localhost/", "password", "${var.SPOOL_HEADERS_PASSWORD}"),
+                ProvisioningTarget.LOCAL);
+
+        Map<String, Object> container = fragment.resources().get("docker_container").get("headers");
+        assertThat(container.get("ports")).isEqualTo(List.of(Map.of("internal", 5432, "external", 5432)));
+        assertThat(container.get("env")).asInstanceOf(LIST).contains("POSTGRES_DB=postgres", "POSTGRES_USER=postgres");
+    }
+
+    @Test
+    void postgresql_inAws_cannotBeGenerated() {
+        assertThat(provisioning("POSTGRESQL", "headers", HEADERS).forTarget(ProvisioningTarget.AWS)).isEmpty();
+    }
+
+    @Test
+    void postgresql_withThePasswordWrittenInTheDescriptor_isRejected() {
+        Map<String, String> configuration = Map.of("url", "jdbc:postgresql://localhost:5432/orders", "password", "spool");
+
+        assertThatThrownBy(() -> provisioning("POSTGRESQL", "headers", configuration))
+                .isInstanceOf(InvalidPluginConfigurationException.class)
+                .hasMessageContaining("password").hasMessageContaining("${env:");
+    }
+
+    @Test
+    void postgresql_withoutPassword_isRejected() {
+        assertThatThrownBy(() -> provisioning("POSTGRESQL", "headers", Map.of("url", "jdbc:postgresql://localhost:5432/orders")))
+                .isInstanceOf(InvalidPluginConfigurationException.class)
+                .hasMessageContaining("password");
     }
 
     private static TerraformFragment provision(String type, String piece, Map<String, String> configuration,
