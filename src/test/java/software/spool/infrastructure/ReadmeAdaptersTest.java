@@ -6,6 +6,7 @@ import software.spool.infrastructure.spi.provider.ErrorRouterProvider;
 import software.spool.infrastructure.spi.provider.PollSourceProvider;
 import software.spool.infrastructure.spi.provider.StreamSourceProvider;
 import software.spool.infrastructure.spi.provider.authentication.RequestAuthenticatorProvider;
+import software.spool.infrastructure.spi.provider.provisioning.ProvisioningProvider;
 import software.spool.infrastructure.spi.provider.bus.EventBusProvider;
 import software.spool.infrastructure.spi.provider.dataLake.DataLakeEnvelopeRemoverProvider;
 import software.spool.infrastructure.spi.provider.dataLake.DataLakeWriterProvider;
@@ -52,6 +53,7 @@ class ReadmeAdaptersTest {
             PollSourceProvider.class, StreamSourceProvider.class,
             NormalizerProvider.class,
             ErrorRouterProvider.class,
+            ProvisioningProvider.class,
             RequestAuthenticatorProvider.class);
 
     @Test

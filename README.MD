@@ -190,10 +190,21 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Stream source | `StreamSourceProvider` | `IN_MEMORY` | `sourceId`, `eventClassName` |
 | Normalizer (media type) | `NormalizerProvider` | `JSON`, `JSON_ARRAY`, `JSON_OBJECT`, `EVENT_CLASS`, `EVENT_CLASS_ARRAY`, `PDF` | `rootPath`, `rules`, set by the crawler |
 | Error router | `ErrorRouterProvider` | `DEFAULT` | none |
+| Terraform of a piece | `ProvisioningProvider` | `IN_MEMORY`, `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA` | the configuration of the piece: see below |
 | Authentication | `RequestAuthenticatorProvider` | `OIDC`, `HMAC_SIGNATURE` | `OIDC`: `issuer`, `audience`, `jwksUri` and `rolesClaim` optional. `HMAC_SIGNATURE`: `header`, `secret`, `timestampHeader`, `tolerance` and `roles` optional |
 
 The `S3` adapters also read `accessKeyEnv` and `secretKeyEnv`, the names of the environment variables with the
 credentials.
+
+A `ProvisioningProvider` generates the Terraform of the pieces of its type for `spool-provisioning`
+([ADR-024](https://linear.app/javier-castilla/document/adr-024-cada-plugin-genera-el-terraform-de-sus-piezas-para-un-destino-e4f6ee200935)):
+
+| Type | Local target | AWS target |
+|---|---|---|
+| `IN_MEMORY` | Nothing | Nothing |
+| `FILE_SYSTEM`, `RAW_FILE_SYSTEM` | Nothing | Cannot be generated |
+| `S3` | A bucket in a LocalStack container that every S3 piece shares, on the port of `endpoint` | An encrypted bucket closed to the public, and object access for the modules that use it |
+| `KAFKA` | A broker in a container, on the port of the first of `bootstrap.servers` | Cannot be generated yet |
 
 There is no relational backend: no PostgreSQL, no JDBC. The inbox, the data lake and the data mart are files or S3
 objects. A database is a new adapter, written as a plugin of the port it serves (see
