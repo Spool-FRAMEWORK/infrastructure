@@ -13,6 +13,7 @@ import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.model.vo.PartitionedEnvelope;
+import software.spool.infrastructure.adapter.datamart.S3DataMartWriter;
 import software.spool.infrastructure.adapter.s3.InMemoryS3Client;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountTarget;
@@ -24,10 +25,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class S3PartitionedReaderTest {
     private static final String BUCKET = "spool-datalake-test";
@@ -191,10 +193,27 @@ class S3PartitionedReaderTest {
     }
 
     @Test
-    void read_aggregationTarget_failsBecauseSilverIsNotReadFromS3() {
-        assertThatThrownBy(() -> reader().read(MountTarget.aggregation("totals", PAYMENTS)))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessage("The S3 data lake cannot be read by an AGGREGATION mount: it keeps only bronze, and that mount reads silver");
+    void read_aggregationTarget_givesTheSilverRecordsAMountWroteWithTheirPartition() {
+        PartitionKey silverPartition = PartitionKey.ofEntriesWithoutDate().with("source", "payments")
+                .with("eventType", "Payment").build();
+        new S3DataMartWriter(s3Client, BUCKET, concurrency).write(MountTarget.transformation("payments", silverPartition),
+                Stream.of(new PartitionedRecord<>(silverPartition, GenericRecord.of(Map.of("payload", Map.of("id", "payment-1"))))));
+
+        List<PartitionedRecord<GenericRecord>> read = reader()
+                .read(MountTarget.aggregation("totals", PartitionKey.ofEntriesWithoutDate().with("source", "payments").build()))
+                .toList();
+
+        assertThat(read).singleElement().satisfies(record -> {
+            assertThat(record.partitionKey()).isEqualTo(new PartitionKey("payments::" + silverPartition.value()));
+            assertThat(record.record().getNested("payload").getString("id")).isEqualTo("payment-1");
+        });
+    }
+
+    @Test
+    void read_aggregationTarget_doesNotReadBronze() {
+        write(PAYMENTS, json("payment-1", "payments"));
+
+        assertThat(reader().read(MountTarget.aggregation("totals", PAYMENTS)).toList()).isEmpty();
     }
 
     private List<PartitionedRecord<GenericRecord>> read(PartitionKey partition) {

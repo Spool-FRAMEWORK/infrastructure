@@ -183,8 +183,8 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Inbox, remove | `InboxEnvelopeRemoverProvider` | `FILE_SYSTEM`, `S3` | same as the inbox writer |
 | Data lake, write | `DataLakeWriterProvider` | `FILE_SYSTEM`, `S3` | `FILE_SYSTEM`: `path`. `S3`: `bucket`, `region`, `endpoint` |
 | Data lake, remove | `DataLakeEnvelopeRemoverProvider` | `FILE_SYSTEM`, `S3` | same as the data lake writer |
-| Data lake, read partitions | `PartitionedReaderProvider` | `FILE_SYSTEM`, `S3` | `FILE_SYSTEM`: `path`, `payload`. `S3`: same as the data lake writer; it reads only bronze, so it serves `TRANSFORMATION` mounts |
-| Data mart, write | `DataMartWriterProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM` | `path` |
+| Data lake, read partitions | `PartitionedReaderProvider` | `FILE_SYSTEM`, `S3` | `FILE_SYSTEM`: `path`, `payload`. `S3`: same as the data lake writer |
+| Data mart, write | `DataMartWriterProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3` | `FILE_SYSTEM` and `RAW_FILE_SYSTEM`: `path`. `S3`: `bucket`, `region`, `endpoint` |
 | Quarantine | `QuarantineRepositoryProvider` | `FILE_SYSTEM` | `path` |
 | Poll source | `PollSourceProvider` | `HTTP` | `sourceId`, `url` |
 | Stream source | `StreamSourceProvider` | `IN_MEMORY` | `sourceId`, `eventClassName` |

@@ -32,16 +32,16 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Reads the envelopes of a partition of bronze, and of the partitions below it, from a bucket laid out by
- * {@link S3DataLakeLayout}, several objects at a time on the threads of a {@link BoundedConcurrency}.
+ * Reads a partition of the data lake, and the partitions below it, from a bucket laid out by {@link S3DataLakeLayout},
+ * several objects at a time on the threads of a {@link BoundedConcurrency}: the envelopes of bronze for a
+ * {@link MountMode#TRANSFORMATION} mount, and the records of silver for a {@link MountMode#AGGREGATION} one.
  *
  * <p>The leading entries of the partition are followed as a prefix while the bucket has objects under them. From the
  * first one it has not, such as {@code source=payments} kept behind the date entries, the objects below the last
  * prefix are read when their folder has every remaining entry, wherever it is in their path.</p>
  *
  * <p>The header of each envelope comes from the metadata of its payload object or, when it did not fit there, from
- * the object next to it. A payload without a header is an envelope still being written, and is skipped. Silver is not
- * kept in S3, so only a {@link MountMode#TRANSFORMATION} mount can read from it.</p>
+ * the object next to it. A payload without a header is an envelope still being written, and is skipped.</p>
  */
 public class S3PartitionedReader implements PartitionedReader {
     private static final Logger LOG = LoggerFactory.getLogger(S3PartitionedReader.class);
@@ -59,27 +59,25 @@ public class S3PartitionedReader implements PartitionedReader {
 
     @Override
     public Stream<PartitionedRecord<GenericRecord>> read(MountTarget mountTarget) {
-        if (mountTarget.mode() != MountMode.TRANSFORMATION) {
-            throw new UnsupportedOperationException("The S3 data lake cannot be read by an " + mountTarget.mode()
-                    + " mount: it keeps only bronze, and that mount reads silver");
-        }
-        List<String> objectKeys = objectKeysOf(mountTarget.sourceKey());
+        String layer = S3DataLakeLayout.layerReadBy(mountTarget.mode());
+        List<String> objectKeys = objectKeysOf(layer, mountTarget.sourceKey());
         Set<String> existingKeys = new HashSet<>(objectKeys);
-        List<String> envelopeKeys = objectKeys.stream().filter(key -> !S3DataLakeLayout.isHeaderKey(key)).toList();
-        return concurrency.map(sliceOf(envelopeKeys, mountTarget.slice()),
-                        key -> recordAt(key, existingKeys, mountTarget.sourceKey()))
+        List<String> recordKeys = objectKeys.stream().filter(key -> !S3DataLakeLayout.isHeaderKey(key)).toList();
+        return concurrency.map(sliceOf(recordKeys, mountTarget.slice()),
+                        key -> recordAt(layer, key, existingKeys, mountTarget.sourceKey()))
                 .flatMap(Optional::stream);
     }
 
-    private List<String> objectKeysOf(PartitionKey partition) {
+    private List<String> objectKeysOf(String layer, PartitionKey partition) {
         List<String> entries = KeyEntries.split(partition.value());
         int leadingEntries = 0;
-        while (leadingEntries < entries.size() && hasObjectsUnder(S3DataLakeLayout.prefixOf(entries.subList(0, leadingEntries + 1)))) {
+        while (leadingEntries < entries.size()
+                && hasObjectsUnder(S3DataLakeLayout.prefixOf(layer, entries.subList(0, leadingEntries + 1)))) {
             leadingEntries++;
         }
         List<String> remainingEntries = entries.subList(leadingEntries, entries.size());
-        return objectKeysUnder(S3DataLakeLayout.prefixOf(entries.subList(0, leadingEntries))).stream()
-                .filter(key -> S3DataLakeLayout.isInAFolderWithEveryEntry(key, remainingEntries))
+        return objectKeysUnder(S3DataLakeLayout.prefixOf(layer, entries.subList(0, leadingEntries))).stream()
+                .filter(key -> S3DataLakeLayout.isInAFolderWithEveryEntry(layer, key, remainingEntries))
                 .toList();
     }
 
@@ -110,10 +108,13 @@ public class S3PartitionedReader implements PartitionedReader {
         return keys.subList(from, to);
     }
 
-    private Optional<PartitionedRecord<GenericRecord>> recordAt(String key, Set<String> existingKeys, PartitionKey read) {
+    private Optional<PartitionedRecord<GenericRecord>> recordAt(String layer, String key, Set<String> existingKeys,
+                                                               PartitionKey read) {
         try {
-            return envelopeAt(key, existingKeys)
-                    .map(record -> new PartitionedRecord<>(S3DataLakeLayout.partitionOf(key), record));
+            Optional<GenericRecord> record = S3DataLakeLayout.isBronze(layer)
+                    ? envelopeAt(key, existingKeys)
+                    : Optional.of(EnvelopeRecords.ofFormerFormat(get(key).asByteArray()));
+            return record.map(found -> new PartitionedRecord<>(S3DataLakeLayout.partitionOf(layer, key), found));
         } catch (Exception e) {
             throw new DataLakeReadException(read, "the object " + bucket + "/" + key + " could not be read: " + e.getMessage(), e);
         }

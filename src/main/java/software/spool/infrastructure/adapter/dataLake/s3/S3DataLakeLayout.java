@@ -5,6 +5,7 @@ import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.infrastructure.adapter.dataLake.PayloadFormat;
+import software.spool.mounter.api.MountMode;
 
 import java.util.Arrays;
 import java.util.List;
@@ -15,9 +16,11 @@ import java.util.stream.Collectors;
  * {@code <key>.<extension>}, the extension given by its media type, and its header in {@code <key>.meta.json} when it
  * does not fit in the metadata of the payload object. An object {@code <key>} is a whole envelope in the former format.
  * The key of an envelope has no dot, so the name of an object up to its first dot is the key of its envelope.
+ * The results a mount writes to the data lake are kept under {@code silver/}, one object each.
  */
 final class S3DataLakeLayout {
-    private static final String LAYER = "bronze";
+    private static final String BRONZE = "bronze";
+    private static final String SILVER = "silver";
     private static final String SEPARATOR = "/";
     private static final String EXTENSION_SEPARATOR = ".";
     private static final String HEADER_SUFFIX = ".meta.json";
@@ -38,25 +41,33 @@ final class S3DataLakeLayout {
     }
 
     static String formerKeyOf(PartitionKey partition, IdempotencyKey idempotencyKey) {
-        return LAYER + SEPARATOR + String.join(SEPARATOR, KeyEntries.split(partition.value())) + SEPARATOR + idempotencyKey.value();
+        return BRONZE + SEPARATOR + String.join(SEPARATOR, KeyEntries.split(partition.value())) + SEPARATOR + idempotencyKey.value();
     }
 
-    static String prefixOf(List<String> partitionEntries) {
-        return LAYER + SEPARATOR + partitionEntries.stream()
+    static String layerReadBy(MountMode mode) {
+        return mode == MountMode.TRANSFORMATION ? BRONZE : SILVER;
+    }
+
+    static boolean isBronze(String layer) {
+        return layer.equals(BRONZE);
+    }
+
+    static String prefixOf(String layer, List<String> partitionEntries) {
+        return layer + SEPARATOR + partitionEntries.stream()
                 .map(entry -> entry + SEPARATOR)
                 .collect(Collectors.joining());
     }
 
-    static PartitionKey partitionOf(String objectKey) {
-        return new PartitionKey(KeyEntries.join(folderEntriesOf(objectKey)));
+    static PartitionKey partitionOf(String layer, String objectKey) {
+        return new PartitionKey(KeyEntries.join(folderEntriesOf(layer, objectKey)));
     }
 
-    static boolean isInAFolderWithEveryEntry(String objectKey, List<String> partitionEntries) {
-        return folderEntriesOf(objectKey).containsAll(partitionEntries);
+    static boolean isInAFolderWithEveryEntry(String layer, String objectKey, List<String> partitionEntries) {
+        return folderEntriesOf(layer, objectKey).containsAll(partitionEntries);
     }
 
-    private static List<String> folderEntriesOf(String objectKey) {
-        String folder = objectKey.substring(LAYER.length() + SEPARATOR.length(), objectKey.lastIndexOf(SEPARATOR) + 1);
+    private static List<String> folderEntriesOf(String layer, String objectKey) {
+        String folder = objectKey.substring(layer.length() + SEPARATOR.length(), objectKey.lastIndexOf(SEPARATOR) + 1);
         return Arrays.stream(folder.split(SEPARATOR))
                 .filter(entry -> !entry.isEmpty())
                 .toList();
