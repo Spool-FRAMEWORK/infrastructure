@@ -207,6 +207,11 @@ A `ProvisioningProvider` generates the Terraform of the pieces of its type for `
 | `S3` | A bucket in a LocalStack container that every S3 piece shares, on the port of `endpoint` | An encrypted bucket closed to the public, and object access for the modules that use it |
 | `KAFKA` | A broker in a container, on the port of the first of `bootstrap.servers` | Cannot be generated yet |
 
+A `HealthProbeProvider` builds the check of the pieces of its type, used in the health of the modules
+([ADR-030](https://linear.app/javier-castilla/document/adr-030-la-salud-de-un-modulo-sale-de-cada-pieza-de-infraestructura-abe3aade918e)):
+`FILE_SYSTEM` and `RAW_FILE_SYSTEM` write and delete an empty file in the folder, `S3` lists a single key of the
+bucket and `KAFKA` asks the brokers for the id of their cluster. None of them changes what the piece keeps.
+
 There is no relational backend: no PostgreSQL, no JDBC. The inbox, the data lake and the data mart are files or S3
 objects. A database is a new adapter, written as a plugin of the port it serves (see
 [Custom Plugin via SPI](#custom-plugin-via-spi)).
