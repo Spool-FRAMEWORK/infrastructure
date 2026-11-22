@@ -5,10 +5,6 @@ import software.spool.core.port.authentication.Identity;
 import software.spool.core.port.authentication.RequestAuthenticator;
 import software.spool.core.port.http.HttpRequest;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
@@ -24,12 +20,10 @@ import java.util.Set;
  * captured request cannot be sent again later. A rejection never repeats the signature or the secret.
  */
 public final class HmacSignatureRequestAuthenticator implements RequestAuthenticator {
-    private static final String ALGORITHM = "HmacSHA256";
-    private static final String PREFIX = "sha256=";
 
     private final String name;
     private final String header;
-    private final SecretKeySpec key;
+    private final HmacSha256 hmac;
     private final Optional<String> timestampHeader;
     private final Duration tolerance;
     private final Set<String> roles;
@@ -39,7 +33,7 @@ public final class HmacSignatureRequestAuthenticator implements RequestAuthentic
                                              Duration tolerance, Set<String> roles, Clock clock) {
         this.name = name;
         this.header = header;
-        this.key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), ALGORITHM);
+        this.hmac = new HmacSha256(secret);
         this.timestampHeader = timestampHeader;
         this.tolerance = tolerance;
         this.roles = Set.copyOf(roles);
@@ -62,9 +56,9 @@ public final class HmacSignatureRequestAuthenticator implements RequestAuthentic
             if (timestamp.isEmpty()) return Authentication.rejected("the request has no " + timestampHeader.get() + " header");
             Optional<String> outOfTolerance = checkTimestamp(timestamp.get());
             if (outOfTolerance.isPresent()) return Authentication.rejected(outOfTolerance.get());
-            signedContent = withTimestamp(timestamp.get(), signedContent);
+            signedContent = HmacSha256.withTimestamp(timestamp.get(), signedContent);
         }
-        if (!MessageDigest.isEqual(signatureOf(signedContent), provided)) {
+        if (!MessageDigest.isEqual(hmac.of(signedContent), provided)) {
             return Authentication.rejected("the " + header + " signature does not match the body");
         }
         return Authentication.accepted(new Identity(name, roles, name));
@@ -84,26 +78,8 @@ public final class HmacSignatureRequestAuthenticator implements RequestAuthentic
         return Optional.empty();
     }
 
-    private static byte[] withTimestamp(String timestamp, byte[] body) {
-        byte[] prefix = (timestamp.trim() + ".").getBytes(StandardCharsets.UTF_8);
-        byte[] content = new byte[prefix.length + body.length];
-        System.arraycopy(prefix, 0, content, 0, prefix.length);
-        System.arraycopy(body, 0, content, prefix.length, body.length);
-        return content;
-    }
-
-    private byte[] signatureOf(byte[] content) {
-        try {
-            Mac mac = Mac.getInstance(ALGORITHM);
-            mac.init(key);
-            return mac.doFinal(content);
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException(ALGORITHM + " is not available in this JVM", e);
-        }
-    }
-
     private static String withoutPrefix(String signature) {
         String trimmed = signature.trim();
-        return trimmed.startsWith(PREFIX) ? trimmed.substring(PREFIX.length()) : trimmed;
+        return trimmed.startsWith(HmacSha256.PREFIX) ? trimmed.substring(HmacSha256.PREFIX.length()) : trimmed;
     }
 }
