@@ -1,10 +1,7 @@
 package software.spool.infrastructure.adapter.datamart;
 
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
-import software.spool.core.model.vo.KeyEntries;
-import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.port.serde.RecordSerializer;
-import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.DataMartWriter;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedRecord;
@@ -70,20 +67,14 @@ public class FileSystemDataMartWriter implements DataMartWriter {
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
         concurrency.forEach(result, partitioned -> {
-            String partitionPath = String.join("/", KeyEntries.split(partitioned.partitionKey().value()));
-            Path dir = basePath.resolve(target.qualifiedDataMart()).resolve(partitionPath);
+            DataMartObject object = DataMartObject.of(target, partitioned, serializer);
+            Path file = basePath.resolve(object.path());
             try {
-                Files.createDirectories(dir);
-                byte[] serialized = serializer.serialize(contentOf(partitioned.record()));
-                Path file = dir.resolve(IdempotencyKey.of(target.dataMart(), serialized).value() + "." + target.resolveExtension(serialized));
-                Files.write(file, serialized);
+                Files.createDirectories(file.getParent());
+                Files.write(file, object.content());
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         });
-    }
-
-    private static Object contentOf(Object record) {
-        return record instanceof GenericRecord generic ? generic.toMap() : record;
     }
 }
