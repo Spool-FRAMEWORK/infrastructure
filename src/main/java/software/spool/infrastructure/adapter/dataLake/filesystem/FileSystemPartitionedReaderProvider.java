@@ -1,16 +1,11 @@
 package software.spool.infrastructure.adapter.dataLake.filesystem;
 
-import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
-import software.spool.core.port.serde.PayloadDeserializer;
 import software.spool.infrastructure.adapter.concurrency.ConcurrencyConfiguration;
+import software.spool.infrastructure.adapter.dataLake.EnvelopeRecords;
 import software.spool.infrastructure.spi.SpoolPlugin;
 import software.spool.infrastructure.spi.provider.PluginConfiguration;
 import software.spool.infrastructure.spi.provider.dataLake.PartitionedReaderProvider;
-import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.PartitionedReader;
-
-import java.util.Base64;
-import java.util.Map;
 
 @SpoolPlugin(PartitionedReaderProvider.class)
 public class FileSystemPartitionedReaderProvider implements PartitionedReaderProvider {
@@ -33,19 +28,8 @@ public class FileSystemPartitionedReaderProvider implements PartitionedReaderPro
     public PartitionedReader create(PluginConfiguration configuration) {
         return new FileSystemPartitionedReader(
                 configuration.require("path"),
-                buildDeserializer(),
+                EnvelopeRecords::ofFormerFormat,
                 ConcurrencyConfiguration.from(configuration)
         );
-    }
-
-    private static PayloadDeserializer<GenericRecord> buildDeserializer() {
-        return bytes -> {
-            Map<String, Object> envelope = PayloadDeserializerFactory.json().asMap().deserialize(bytes);
-            if (envelope.get("payload") instanceof String encoded) {
-                byte[] decoded = Base64.getDecoder().decode(encoded);
-                envelope.put("payload", PayloadDeserializerFactory.json().asMap().deserialize(decoded));
-            }
-            return GenericRecord.of(envelope);
-        };
     }
 }

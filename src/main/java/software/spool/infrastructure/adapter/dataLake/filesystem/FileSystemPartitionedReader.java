@@ -2,14 +2,13 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 
 import software.spool.core.adapter.logging.LoggerFactory;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
-import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.exception.DeserializationException;
 import software.spool.core.model.vo.EnvelopeHeader;
 import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.serde.PayloadDeserializer;
-import software.spool.infrastructure.adapter.dataLake.PayloadFormat;
+import software.spool.infrastructure.adapter.dataLake.EnvelopeRecords;
 import software.spool.mounter.api.MountMode;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountTarget;
@@ -42,7 +41,6 @@ public class FileSystemPartitionedReader implements PartitionedReader {
 
     private static final Logger log = LoggerFactory.getLogger("FileSystemPartitionedReader");
 
-    private static final String PAYLOAD = "payload";
     private static final PayloadDeserializer<EnvelopeHeader> HEADERS = PayloadDeserializerFactory.json().as(EnvelopeHeader.class);
 
     private final Path basePath;
@@ -178,11 +176,7 @@ public class FileSystemPartitionedReader implements PartitionedReader {
 
     private static GenericRecord envelopeOf(Path headerFile) throws IOException {
         EnvelopeHeader header = HEADERS.deserialize(Files.readAllBytes(headerFile));
-        Map<String, Object> fields = new LinkedHashMap<>(PayloadDeserializerFactory.json().asMap()
-                .deserialize(RecordSerializerFactory.record().serialize(header)));
-        byte[] payload = Files.readAllBytes(FileSystemDataLakeLayout.payloadFileNextTo(headerFile, header));
-        fields.put(PAYLOAD, PayloadFormat.readable(header.mediaType(), payload));
-        return GenericRecord.of(fields);
+        return EnvelopeRecords.of(header, Files.readAllBytes(FileSystemDataLakeLayout.payloadFileNextTo(headerFile, header)));
     }
 
     private PartitionKey resolveFileKey(Path file, Path layerPath) {
