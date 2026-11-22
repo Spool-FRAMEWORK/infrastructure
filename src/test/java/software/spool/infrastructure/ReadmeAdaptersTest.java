@@ -11,6 +11,9 @@ import software.spool.infrastructure.spi.provider.health.HealthProbeProvider;
 import software.spool.infrastructure.spi.provider.bus.EventBusProvider;
 import software.spool.infrastructure.spi.provider.dataLake.DataLakeEnvelopeRemoverProvider;
 import software.spool.infrastructure.spi.provider.dataLake.DataLakeWriterProvider;
+import software.spool.infrastructure.spi.provider.dataLake.EnvelopeHeaderReaderProvider;
+import software.spool.infrastructure.spi.provider.dataLake.EnvelopeHeaderRemoverProvider;
+import software.spool.infrastructure.spi.provider.dataLake.EnvelopeHeaderWriterProvider;
 import software.spool.infrastructure.spi.provider.dataLake.PartitionedReaderProvider;
 import software.spool.infrastructure.spi.provider.datamart.DataMartWriterProvider;
 import software.spool.infrastructure.spi.provider.inbox.InboxEnvelopeRemoverProvider;
@@ -49,6 +52,7 @@ class ReadmeAdaptersTest {
             InboxWriterProvider.class, InboxReaderProvider.class, InboxUpdaterProvider.class,
             InboxEnvelopeRemoverProvider.class,
             DataLakeWriterProvider.class, DataLakeEnvelopeRemoverProvider.class, PartitionedReaderProvider.class,
+            EnvelopeHeaderWriterProvider.class, EnvelopeHeaderReaderProvider.class, EnvelopeHeaderRemoverProvider.class,
             DataMartWriterProvider.class,
             QuarantineRepositoryProvider.class,
             PollSourceProvider.class, StreamSourceProvider.class,

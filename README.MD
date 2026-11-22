@@ -184,6 +184,9 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Data lake, write | `DataLakeWriterProvider` | `FILE_SYSTEM`, `S3` | `FILE_SYSTEM`: `path`. `S3`: `bucket`, `region`, `endpoint` |
 | Data lake, remove | `DataLakeEnvelopeRemoverProvider` | `FILE_SYSTEM`, `S3` | same as the data lake writer |
 | Data lake, read partitions | `PartitionedReaderProvider` | `FILE_SYSTEM`, `S3` | `FILE_SYSTEM`: `path`, `payload`. `S3`: same as the data lake writer |
+| Envelope headers, write | `EnvelopeHeaderWriterProvider` | `POSTGRESQL` | `url` (a `jdbc:postgresql:` URL), `user`, `password`, `table` (`envelope_headers` by default), `poolSize` (4 by default) |
+| Envelope headers, read | `EnvelopeHeaderReaderProvider` | `POSTGRESQL` | same as the envelope headers writer |
+| Envelope headers, remove | `EnvelopeHeaderRemoverProvider` | `POSTGRESQL` | same as the envelope headers writer |
 | Data mart, write | `DataMartWriterProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3` | `FILE_SYSTEM` and `RAW_FILE_SYSTEM`: `path`. `S3`: `bucket`, `region`, `endpoint` |
 | Quarantine | `QuarantineRepositoryProvider` | `FILE_SYSTEM` | `path` |
 | Poll source | `PollSourceProvider` | `HTTP` | `sourceId`, `url` |
@@ -212,9 +215,12 @@ A `HealthProbeProvider` builds the check of the pieces of its type, used in the 
 `FILE_SYSTEM` and `RAW_FILE_SYSTEM` write and delete an empty file in the folder, `S3` lists a single key of the
 bucket and `KAFKA` asks the brokers for the id of their cluster. None of them changes what the piece keeps.
 
-There is no relational backend: no PostgreSQL, no JDBC. The inbox, the data lake and the data mart are files or S3
-objects. A database is a new adapter, written as a plugin of the port it serves (see
-[Custom Plugin via SPI](#custom-plugin-via-spi)).
+The inbox, the data lake and the data mart are files or S3 objects. The only relational backend is the `POSTGRESQL`
+store of envelope headers
+([ADR-023](https://linear.app/javier-castilla/document/adr-023-el-data-lake-guarda-el-payload-tal-cual-y-los-metadatos-del-735a53af507b)):
+it creates its table at startup if it is missing, and the writer, the reader and the remover of the same
+configuration share one store and one pool of connections. Any other database is a new adapter, written as a plugin of
+the port it serves (see [Custom Plugin via SPI](#custom-plugin-via-spi)).
 
 ---
 
