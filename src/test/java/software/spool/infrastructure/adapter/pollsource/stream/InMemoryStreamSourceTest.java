@@ -85,6 +85,33 @@ class InMemoryStreamSourceTest {
     }
 
     @Test
+    void stop_cancelsTheSubscription_soEventsPublishedAfterwardsAreNotDelivered() {
+        InMemoryEventBus realBus = new InMemoryEventBus();
+        InMemoryStreamSource<TestEvent> source = new InMemoryStreamSource<>(realBus, TestEvent.class, "src");
+        List<TestEvent> received = new ArrayList<>();
+
+        source.start(received::add, ex -> {});
+        source.stop();
+        realBus.publish(new TestEvent("after stop"));
+
+        assertThat(received).isEmpty();
+    }
+
+    @Test
+    void start_afterStop_deliversEachNewEventOnce() {
+        InMemoryEventBus realBus = new InMemoryEventBus();
+        InMemoryStreamSource<TestEvent> source = new InMemoryStreamSource<>(realBus, TestEvent.class, "src");
+        List<TestEvent> received = new ArrayList<>();
+
+        source.start(received::add, ex -> {});
+        source.stop();
+        source.start(received::add, ex -> {});
+        realBus.publish(new TestEvent("after restart"));
+
+        assertThat(received).extracting(TestEvent::payload).containsExactly("after restart");
+    }
+
+    @Test
     void start_whenHandlerThrows_forwardsExceptionToErrorConsumer() throws Exception {
         InMemoryEventBus realBus = new InMemoryEventBus();
         InMemoryStreamSource<TestEvent> source = new InMemoryStreamSource<>(realBus, TestEvent.class, "src");

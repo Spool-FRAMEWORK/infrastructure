@@ -35,8 +35,8 @@ public class InMemoryStreamSource<E extends Event> implements StreamSource<E> {
 
     @Override
     public void stop() {
-        this.subscription = Subscription.NULL;
         this.subscription.cancel();
+        this.subscription = Subscription.NULL;
     }
 
     @Override
