@@ -4,14 +4,10 @@ import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
-import software.amazon.awssdk.services.s3.model.S3Object;
 import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.logging.LoggerFactory;
 import software.spool.core.exception.DataLakeReadException;
 import software.spool.core.model.vo.EnvelopeHeader;
-import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.serde.PayloadDeserializer;
@@ -24,7 +20,6 @@ import software.spool.mounter.api.port.PartitionedRecord;
 import software.spool.mounter.api.port.scaling.PartitionSlice;
 import software.spool.mounter.api.utils.BoundedConcurrency;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -36,9 +31,7 @@ import java.util.stream.Stream;
  * several objects at a time on the threads of a {@link BoundedConcurrency}: the envelopes of bronze for a
  * {@link MountMode#TRANSFORMATION} mount, and the records of silver for a {@link MountMode#AGGREGATION} one.
  *
- * <p>The leading entries of the partition are followed as a prefix while the bucket has objects under them. From the
- * first one it has not, such as {@code source=payments} kept behind the date entries, the objects below the last
- * prefix are read when their folder has every remaining entry, wherever it is in their path.</p>
+ * <p>The objects of the partition are found as {@link S3PartitionObjects} says.</p>
  *
  * <p>The header of each envelope comes from the metadata of its payload object or, when it did not fit there, from
  * the object next to it. A payload without a header is an envelope still being written, and is skipped.</p>
@@ -50,55 +43,24 @@ public class S3PartitionedReader implements PartitionedReader {
     private final S3Client s3Client;
     private final String bucket;
     private final BoundedConcurrency concurrency;
+    private final S3PartitionObjects objects;
 
     public S3PartitionedReader(S3Client s3Client, String bucket, BoundedConcurrency concurrency) {
         this.s3Client = s3Client;
         this.bucket = bucket;
         this.concurrency = concurrency;
+        this.objects = new S3PartitionObjects(s3Client, bucket);
     }
 
     @Override
     public Stream<PartitionedRecord<GenericRecord>> read(MountTarget mountTarget) {
         String layer = S3DataLakeLayout.layerReadBy(mountTarget.mode());
-        List<String> objectKeys = objectKeysOf(layer, mountTarget.sourceKey());
+        List<String> objectKeys = objects.keysOf(layer, mountTarget.sourceKey());
         Set<String> existingKeys = new HashSet<>(objectKeys);
         List<String> recordKeys = objectKeys.stream().filter(key -> !S3DataLakeLayout.isHeaderKey(key)).toList();
         return concurrency.map(sliceOf(recordKeys, mountTarget.slice()),
                         key -> recordAt(layer, key, existingKeys, mountTarget.sourceKey()))
                 .flatMap(Optional::stream);
-    }
-
-    private List<String> objectKeysOf(String layer, PartitionKey partition) {
-        List<String> entries = KeyEntries.split(partition.value());
-        int leadingEntries = 0;
-        while (leadingEntries < entries.size()
-                && hasObjectsUnder(S3DataLakeLayout.prefixOf(layer, entries.subList(0, leadingEntries + 1)))) {
-            leadingEntries++;
-        }
-        List<String> remainingEntries = entries.subList(leadingEntries, entries.size());
-        return objectKeysUnder(S3DataLakeLayout.prefixOf(layer, entries.subList(0, leadingEntries))).stream()
-                .filter(key -> S3DataLakeLayout.isInAFolderWithEveryEntry(layer, key, remainingEntries))
-                .toList();
-    }
-
-    private boolean hasObjectsUnder(String prefix) {
-        return !s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(bucket).prefix(prefix).maxKeys(1).build())
-                .contents().isEmpty();
-    }
-
-    private List<String> objectKeysUnder(String prefix) {
-        List<String> keys = new ArrayList<>();
-        String continuationToken = null;
-        do {
-            ListObjectsV2Response listing = s3Client.listObjectsV2(ListObjectsV2Request.builder()
-                    .bucket(bucket)
-                    .prefix(prefix)
-                    .continuationToken(continuationToken)
-                    .build());
-            listing.contents().stream().map(S3Object::key).forEach(keys::add);
-            continuationToken = Boolean.TRUE.equals(listing.isTruncated()) ? listing.nextContinuationToken() : null;
-        } while (continuationToken != null);
-        return keys;
     }
 
     private static List<String> sliceOf(List<String> keys, PartitionSlice slice) {
