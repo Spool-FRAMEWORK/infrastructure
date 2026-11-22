@@ -53,7 +53,7 @@ public class FileSystemPartitionDiscovery implements PartitionDiscovery {
             partitions = walk
                     .filter(Files::isDirectory)
                     .filter(this::containsFiles)
-                    .filter(dir -> FileSystemPartitionedReader.matchesPendingConstraints(dir, resolved.pending()))
+                    .filter(dir -> hasEveryEntry(dir, layerPath, resolved.pending()))
                     .map(dir -> {
                         long count = countFiles(dir);
                         PartitionKey key = toPartitionKey(dir, layerPath);
@@ -67,6 +67,11 @@ public class FileSystemPartitionDiscovery implements PartitionDiscovery {
 
         log.info("Discovery complete — {} partition(s) found", partitions.size());
         return partitions;
+    }
+
+    private boolean hasEveryEntry(Path dir, Path layerPath, Map<String, String> pending) {
+        List<String> entries = KeyEntries.split(toPartitionKey(dir, layerPath).value());
+        return pending.entrySet().stream().allMatch(entry -> entries.contains(entry.getKey() + "=" + entry.getValue()));
     }
 
     private boolean containsFiles(Path dir) {
