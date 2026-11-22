@@ -66,15 +66,16 @@ public class FileSystemDataMartWriter implements DataMartWriter {
 
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
-        concurrency.forEach(result, partitioned -> {
-            DataMartObject object = DataMartObject.of(target, partitioned, serializer);
-            Path file = basePath.resolve(object.path());
-            try {
-                Files.createDirectories(file.getParent());
-                Files.write(file, object.content());
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        });
+        concurrency.forEach(result, partitioned -> DataMartObject.of(target, partitioned, serializer).forEach(this::write));
+    }
+
+    private void write(DataMartObject object) {
+        Path file = basePath.resolve(object.path());
+        try {
+            Files.createDirectories(file.getParent());
+            Files.write(file, object.content());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }

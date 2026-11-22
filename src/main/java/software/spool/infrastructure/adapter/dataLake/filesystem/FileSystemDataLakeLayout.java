@@ -3,6 +3,7 @@ package software.spool.infrastructure.adapter.dataLake.filesystem;
 import software.spool.core.model.vo.EnvelopeHeader;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.core.model.vo.KeyEntries;
+import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.infrastructure.adapter.dataLake.PayloadFormat;
 
@@ -16,7 +17,7 @@ import java.nio.file.Path;
  */
 final class FileSystemDataLakeLayout {
     private static final String LAYER = "bronze";
-    private static final String HEADER_SUFFIX = ".meta.json";
+    private static final String HEADER_SUFFIX = PayloadFormat.HEADER_SUFFIX;
     private static final String EXTENSION_SEPARATOR = ".";
 
     private final Path basePath;
@@ -50,7 +51,11 @@ final class FileSystemDataLakeLayout {
     }
 
     static Path payloadFileNextTo(Path headerFile, EnvelopeHeader header) {
-        return headerFile.resolveSibling(keyOf(headerFile) + EXTENSION_SEPARATOR + PayloadFormat.extensionOf(header.mediaType()));
+        return payloadFileNextTo(headerFile, header.mediaType());
+    }
+
+    static Path payloadFileNextTo(Path headerFile, MediaType mediaType) {
+        return headerFile.resolveSibling(keyOf(headerFile) + EXTENSION_SEPARATOR + PayloadFormat.extensionOf(mediaType));
     }
 
     static boolean isPayloadOfAnEnvelope(Path file) {

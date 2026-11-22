@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FileSystemPartitionedReaderRecordsTest {
     private static final PartitionKey PARTITION = PartitionKey.ofEntriesWithoutDate().with("source", "payments").build();
     private static final String PAYLOAD = "{\"id\":\"payment-1\",\"amount\":10}";
+    private static final byte[] PDF = {0x25, 0x50, 0x44, 0x46, (byte) 0xe2, (byte) 0xe3};
 
     @TempDir
     Path dataLake;
@@ -73,14 +74,37 @@ class FileSystemPartitionedReaderRecordsTest {
 
     @Test
     void read_bronzeEnvelopeWithABinaryPayload_givesItsBytes() {
-        byte[] pdf = {0x25, 0x50, 0x44, 0x46, (byte) 0xe2, (byte) 0xe3};
-        Envelope binary = new Envelope(IdempotencyKey.of("report-1"), new EventMetadata().set(EventMetadataKey.SOURCE, "reports"),
-                MediaType.of("application/pdf"), pdf, EnvelopeStatus.PERSISTED, 0, Instant.now(), Instant.now());
-        new FileSystemDataLakeWriter(dataLake.toString()).write(List.of(new PartitionedEnvelope(PARTITION, binary))).toList();
+        new FileSystemDataLakeWriter(dataLake.toString()).write(List.of(new PartitionedEnvelope(PARTITION, pdfEnvelope()))).toList();
 
         List<PartitionedRecord<GenericRecord>> read = reader().read(MountTarget.transformation("reports", PARTITION)).toList();
 
-        assertThat(read).singleElement().satisfies(record -> assertThat(record.record().get("payload")).isEqualTo(pdf));
+        assertThat(read).singleElement().satisfies(record -> assertThat(record.record().get("payload")).isEqualTo(PDF));
+    }
+
+    @Test
+    void read_silverBinaryPayloadPromotedFromBronze_givesItsOriginalBytes() {
+        new FileSystemDataLakeWriter(dataLake.toString()).write(List.of(new PartitionedEnvelope(PARTITION, pdfEnvelope()))).toList();
+        new FileSystemDataMartWriter(dataLake).write(MountTarget.transformation("reports", PARTITION),
+                reader().read(MountTarget.transformation("reports", PARTITION)).map(record -> record));
+
+        List<PartitionedRecord<GenericRecord>> read = reader().read(MountTarget.aggregation("totals", PARTITION)).toList();
+
+        assertThat(read).singleElement().satisfies(record -> {
+            assertThat(record.record().get("payload")).isEqualTo(PDF);
+            assertThat(record.record().getNested("mediaType").getString("value")).isEqualTo("application/pdf");
+            assertThat(record.record().getNested("idempotencyKey").getString("value")).isEqualTo("report-1");
+        });
+    }
+
+    @Test
+    void read_bronzeEnvelopeInTheFormerFormatWithABinaryPayload_givesItsBytes() throws Exception {
+        Path folder = dataLake.resolve("bronze").resolve("source=payments");
+        Files.createDirectories(folder);
+        Files.write(folder.resolve("report-1.json"), RecordSerializerFactory.record().serialize(pdfEnvelope()));
+
+        List<PartitionedRecord<GenericRecord>> read = reader().read(MountTarget.transformation("reports", PARTITION)).toList();
+
+        assertThat(read).singleElement().satisfies(record -> assertThat(record.record().get("payload")).isEqualTo(PDF));
     }
 
     @Test
@@ -103,6 +127,11 @@ class FileSystemPartitionedReaderRecordsTest {
         return new Envelope(IdempotencyKey.of("payment-1"), new EventMetadata().set(EventMetadataKey.SOURCE, "payments"),
                 MediaType.of("application/json"), PAYLOAD.getBytes(StandardCharsets.UTF_8), EnvelopeStatus.PERSISTED, 0,
                 Instant.now(), Instant.now());
+    }
+
+    private static Envelope pdfEnvelope() {
+        return new Envelope(IdempotencyKey.of("report-1"), new EventMetadata().set(EventMetadataKey.SOURCE, "reports"),
+                MediaType.of("application/pdf"), PDF, EnvelopeStatus.PERSISTED, 0, Instant.now(), Instant.now());
     }
 
     private static GenericRecord silverRecord() {

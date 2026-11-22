@@ -43,6 +43,44 @@ class FileSystemDataMartWriterRecordsTest {
                 Map.of("day", "2026-11-17", "total", 35));
     }
 
+    @Test
+    void write_resultWithABinaryPayload_keepsThePayloadAsItIsAndTheRestOfTheRecordNextToIt() throws IOException {
+        write(binaryResult());
+
+        List<Path> files = filesUnder(dataMart);
+        assertThat(files).hasSize(2);
+        Path payload = files.stream().filter(file -> file.getFileName().toString().endsWith(".pdf")).findFirst().orElseThrow();
+        Path header = payload.resolveSibling(payload.getFileName().toString().replace(".pdf", ".meta.json"));
+        assertThat(Files.readAllBytes(payload)).isEqualTo(BinaryResults.PDF);
+        assertThat(PayloadDeserializerFactory.json().asMap().deserialize(Files.readAllBytes(header)))
+                .doesNotContainKey("payload")
+                .containsEntry("mediaType", Map.of("value", "application/pdf"));
+    }
+
+    @Test
+    void write_sameBinaryResultTwice_keepsOnePayloadAndOneHeader() throws IOException {
+        write(binaryResult());
+        write(binaryResult());
+
+        assertThat(filesUnder(dataMart)).hasSize(2);
+    }
+
+    private void write(PartitionedRecord<?> result) {
+        try (BoundedConcurrency concurrency = BoundedConcurrency.withThreads(1)) {
+            new FileSystemDataMartWriter(dataMart, concurrency).write(TARGET, Stream.of(result));
+        }
+    }
+
+    private static PartitionedRecord<?> binaryResult() {
+        return new PartitionedRecord<>(PARTITION, BinaryResults.pdfRecord());
+    }
+
+    private static List<Path> filesUnder(Path root) throws IOException {
+        try (Stream<Path> walk = Files.walk(root)) {
+            return walk.filter(Files::isRegularFile).toList();
+        }
+    }
+
     private static List<Map<String, Object>> contentsUnder(Path root) throws IOException {
         try (Stream<Path> walk = Files.walk(root)) {
             return walk.filter(Files::isRegularFile)

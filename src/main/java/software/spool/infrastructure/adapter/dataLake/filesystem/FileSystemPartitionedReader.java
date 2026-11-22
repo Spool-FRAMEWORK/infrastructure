@@ -1,14 +1,14 @@
 package software.spool.infrastructure.adapter.dataLake.filesystem;
 
 import software.spool.core.adapter.logging.LoggerFactory;
-import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.exception.DeserializationException;
-import software.spool.core.model.vo.EnvelopeHeader;
 import software.spool.core.model.vo.KeyEntries;
+import software.spool.core.model.vo.MediaType;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.serde.PayloadDeserializer;
 import software.spool.infrastructure.adapter.dataLake.EnvelopeRecords;
+import software.spool.infrastructure.adapter.dataLake.EnvelopeRecords.RecordHeader;
 import software.spool.mounter.api.MountMode;
 import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.MountTarget;
@@ -40,8 +40,6 @@ import java.util.stream.Stream;
 public class FileSystemPartitionedReader implements PartitionedReader {
 
     private static final Logger log = LoggerFactory.getLogger("FileSystemPartitionedReader");
-
-    private static final PayloadDeserializer<EnvelopeHeader> HEADERS = PayloadDeserializerFactory.json().as(EnvelopeHeader.class);
 
     private final Path basePath;
     private final PayloadDeserializer<GenericRecord> deserializer;
@@ -161,7 +159,7 @@ public class FileSystemPartitionedReader implements PartitionedReader {
     private PartitionedRecord<GenericRecord> toRecord(Path file, Path layerPath) {
         try {
             GenericRecord record = FileSystemDataLakeLayout.isHeaderFile(file)
-                    ? envelopeOf(file)
+                    ? separatedRecordOf(file)
                     : deserializer.deserialize(Files.readAllBytes(file));
             PartitionKey fileKey = resolveFileKey(file, layerPath);
             return new PartitionedRecord<>(fileKey, record);
@@ -174,9 +172,11 @@ public class FileSystemPartitionedReader implements PartitionedReader {
         }
     }
 
-    private static GenericRecord envelopeOf(Path headerFile) throws IOException {
-        EnvelopeHeader header = HEADERS.deserialize(Files.readAllBytes(headerFile));
-        return EnvelopeRecords.of(header, Files.readAllBytes(FileSystemDataLakeLayout.payloadFileNextTo(headerFile, header)));
+    private static GenericRecord separatedRecordOf(Path headerFile) throws IOException {
+        RecordHeader header = EnvelopeRecords.headerOf(Files.readAllBytes(headerFile));
+        MediaType mediaType = header.mediaType().orElseThrow(() ->
+                new IllegalStateException("The header " + headerFile + " has no media type to find its payload by"));
+        return header.withPayload(Files.readAllBytes(FileSystemDataLakeLayout.payloadFileNextTo(headerFile, mediaType)));
     }
 
     private PartitionKey resolveFileKey(Path file, Path layerPath) {

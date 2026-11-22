@@ -13,7 +13,7 @@ import software.spool.mounter.api.utils.BoundedConcurrency;
 import java.util.stream.Stream;
 
 /**
- * Writes the results of a mount to a bucket, one object each, laid out as {@link DataMartObject} says, several at a
+ * Writes the results of a mount to a bucket, the objects of each laid out as {@link DataMartObject} says, several at a
  * time on the threads of a {@link BoundedConcurrency}. The results are taken from the stream by the calling thread, so
  * the aggregator that produces them stays sequential.
  */
@@ -36,7 +36,7 @@ public class S3DataMartWriter implements DataMartWriter {
 
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
-        concurrency.forEach(result, partitioned -> put(DataMartObject.of(target, partitioned, serializer)));
+        concurrency.forEach(result, partitioned -> DataMartObject.of(target, partitioned, serializer).forEach(this::put));
     }
 
     private void put(DataMartObject object) {

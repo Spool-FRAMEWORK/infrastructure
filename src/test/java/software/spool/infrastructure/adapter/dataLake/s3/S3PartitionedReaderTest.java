@@ -193,6 +193,16 @@ class S3PartitionedReaderTest {
     }
 
     @Test
+    void read_envelopeInTheFormerFormatWithABinaryPayload_givesItsBytes() {
+        Envelope former = pdf("report-1", "payments");
+        put(S3DataLakeLayout.formerKeyOf(PAYMENTS, former.idempotencyKey()), RecordSerializerFactory.record().serialize(former));
+
+        List<PartitionedRecord<GenericRecord>> read = read(PAYMENTS);
+
+        assertThat(read).singleElement().satisfies(record -> assertThat(record.record().get("payload")).isEqualTo(PDF));
+    }
+
+    @Test
     void read_aggregationTarget_givesTheSilverRecordsAMountWroteWithTheirPartition() {
         PartitionKey silverPartition = PartitionKey.ofEntriesWithoutDate().with("source", "payments")
                 .with("eventType", "Payment").build();
@@ -206,6 +216,21 @@ class S3PartitionedReaderTest {
         assertThat(read).singleElement().satisfies(record -> {
             assertThat(record.partitionKey()).isEqualTo(new PartitionKey("payments::" + silverPartition.value()));
             assertThat(record.record().getNested("payload").getString("id")).isEqualTo("payment-1");
+        });
+    }
+
+    @Test
+    void read_aggregationTarget_givesASilverBinaryPayloadPromotedFromBronzeWithItsOriginalBytes() {
+        write(PAYMENTS, pdf("report-1", "payments"));
+        new S3DataMartWriter(s3Client, BUCKET, concurrency).write(MountTarget.transformation("reports", PAYMENTS),
+                read(PAYMENTS).stream().map(record -> record));
+
+        List<PartitionedRecord<GenericRecord>> read = reader().read(MountTarget.aggregation("totals", PAYMENTS)).toList();
+
+        assertThat(read).singleElement().satisfies(record -> {
+            assertThat(record.record().get("payload")).isEqualTo(PDF);
+            assertThat(record.record().getNested("mediaType").getString("value")).isEqualTo("application/pdf");
+            assertThat(record.record().getNested("idempotencyKey").getString("value")).isEqualTo("report-1");
         });
     }
 

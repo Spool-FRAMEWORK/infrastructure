@@ -12,6 +12,10 @@ import java.util.regex.Pattern;
  * as its bytes.
  */
 public final class PayloadFormat {
+    /**
+     * The end of the name of the file kept next to a payload, {@code <key>.meta.json}, with the rest of its record.
+     */
+    public static final String HEADER_SUFFIX = ".meta.json";
     private static final String TYPE_SEPARATOR = "/";
     private static final String PARAMETER_SEPARATOR = ";";
     private static final String JSON = "json";

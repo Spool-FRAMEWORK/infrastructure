@@ -63,13 +63,29 @@ class S3DataMartWriterTest {
         assertThat(s3Client.keys()).hasSize(3);
     }
 
+    @Test
+    void write_resultWithABinaryPayload_keepsThePayloadAsItIsAndTheRestOfTheRecordNextToIt() {
+        writer().write(MountTarget.transformation("reports", PARTITION),
+                Stream.of(new PartitionedRecord<>(PARTITION, BinaryResults.pdfRecord())));
+
+        assertThat(s3Client.keys()).hasSize(2);
+        String payload = s3Client.keys().stream().filter(key -> key.endsWith(".pdf")).findFirst().orElseThrow();
+        assertThat(bytesOf(payload)).isEqualTo(BinaryResults.PDF);
+        assertThat(contentOf(payload.replace(".pdf", ".meta.json")))
+                .doesNotContainKey("payload")
+                .containsEntry("mediaType", Map.of("value", "application/pdf"));
+    }
+
     private S3DataMartWriter writer() {
         return new S3DataMartWriter(s3Client, BUCKET, concurrency);
     }
 
     private Map<String, Object> contentOf(String key) {
-        return PayloadDeserializerFactory.json().asMap()
-                .deserialize(s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(BUCKET).key(key).build()).asByteArray());
+        return PayloadDeserializerFactory.json().asMap().deserialize(bytesOf(key));
+    }
+
+    private byte[] bytesOf(String key) {
+        return s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(BUCKET).key(key).build()).asByteArray();
     }
 
     private static PartitionedRecord<?> result(String id) {

@@ -16,14 +16,14 @@ import java.util.stream.Collectors;
  * {@code <key>.<extension>}, the extension given by its media type, and its header in {@code <key>.meta.json} when it
  * does not fit in the metadata of the payload object. An object {@code <key>} is a whole envelope in the former format.
  * The key of an envelope has no dot, so the name of an object up to its first dot is the key of its envelope.
- * The results a mount writes to the data lake are kept under {@code silver/}, one object each.
+ * The results a mount writes to the data lake are kept under {@code silver/}, as {@code DataMartObject} lays them out.
  */
 final class S3DataLakeLayout {
     private static final String BRONZE = "bronze";
     private static final String SILVER = "silver";
     private static final String SEPARATOR = "/";
     private static final String EXTENSION_SEPARATOR = ".";
-    private static final String HEADER_SUFFIX = ".meta.json";
+    private static final String HEADER_SUFFIX = PayloadFormat.HEADER_SUFFIX;
 
     private S3DataLakeLayout() {
     }

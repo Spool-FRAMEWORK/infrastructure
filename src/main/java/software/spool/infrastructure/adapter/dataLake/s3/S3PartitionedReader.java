@@ -113,7 +113,7 @@ public class S3PartitionedReader implements PartitionedReader {
         try {
             Optional<GenericRecord> record = S3DataLakeLayout.isBronze(layer)
                     ? envelopeAt(key, existingKeys)
-                    : Optional.of(EnvelopeRecords.ofFormerFormat(get(key).asByteArray()));
+                    : Optional.of(silverRecordAt(key, existingKeys));
             return record.map(found -> new PartitionedRecord<>(S3DataLakeLayout.partitionOf(layer, key), found));
         } catch (Exception e) {
             throw new DataLakeReadException(read, "the object " + bucket + "/" + key + " could not be read: " + e.getMessage(), e);
@@ -132,6 +132,13 @@ public class S3PartitionedReader implements PartitionedReader {
                     S3DataLakeLayout.headerKeyNextTo(key));
         }
         return header.map(found -> EnvelopeRecords.of(found, payload.asByteArray()));
+    }
+
+    private GenericRecord silverRecordAt(String key, Set<String> existingKeys) {
+        String headerKey = S3DataLakeLayout.headerKeyNextTo(key);
+        return existingKeys.contains(headerKey)
+                ? EnvelopeRecords.ofSeparated(get(headerKey).asByteArray(), get(key).asByteArray())
+                : EnvelopeRecords.ofFormerFormat(get(key).asByteArray());
     }
 
     private Optional<EnvelopeHeader> headerNextTo(String payloadKey, Set<String> existingKeys) {
