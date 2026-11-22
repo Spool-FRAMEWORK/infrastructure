@@ -2,9 +2,16 @@ package software.spool.infrastructure.integration;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import software.spool.core.exception.PieceAsksToWaitException;
 import software.spool.infrastructure.adapter.pollsource.http.HTTPPollSource;
+import software.spool.infrastructure.adapter.pollsource.http.RetryAfter;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
@@ -71,6 +78,40 @@ class HTTPPollSourceIntegrationTest {
 
         server.verify(getRequestedFor(urlEqualTo("/data"))
                 .withHeader("Accept", equalTo("application/json")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {429, 503})
+    void fetch_whenTheSourceAsksToWait_saysUntilWhen(int status) {
+        server.stubFor(get(urlEqualTo("/data"))
+                .willReturn(aResponse().withStatus(status).withHeader("Retry-After", "3")));
+        Instant now = Instant.parse("2026-11-22T10:00:00Z");
+
+        HTTPPollSource source = new HTTPPollSource(serverUrl("/data"), "src", RetryAfter.byDefault(),
+                Clock.fixed(now, ZoneOffset.UTC));
+
+        assertThatThrownBy(source::fetch)
+                .isInstanceOfSatisfying(PieceAsksToWaitException.class,
+                        wait -> assertThat(wait.until()).isEqualTo(now.plusSeconds(3)));
+    }
+
+    @Test
+    void fetch_500WithRetryAfter_isAFailureAndNotAWait() {
+        server.stubFor(get(urlEqualTo("/data"))
+                .willReturn(aResponse().withStatus(500).withHeader("Retry-After", "3")));
+
+        HTTPPollSource source = new HTTPPollSource(serverUrl("/data"), "src");
+
+        assertThatThrownBy(source::fetch).isNotInstanceOf(PieceAsksToWaitException.class).hasMessageContaining("500");
+    }
+
+    @Test
+    void fetch_429WithoutSayingHowLong_isAFailure() {
+        server.stubFor(get(urlEqualTo("/data")).willReturn(aResponse().withStatus(429)));
+
+        HTTPPollSource source = new HTTPPollSource(serverUrl("/data"), "src");
+
+        assertThatThrownBy(source::fetch).isNotInstanceOf(PieceAsksToWaitException.class).hasMessageContaining("429");
     }
 
     private String serverUrl(String path) {
