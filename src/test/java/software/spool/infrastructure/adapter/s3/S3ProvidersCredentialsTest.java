@@ -28,7 +28,8 @@ class S3ProvidersCredentialsTest {
                 Named.of("S3InboxEnvelopeRemoverProvider", configuration -> new S3InboxEnvelopeRemoverProvider().create(configuration)),
                 Named.of("S3DataLakeWriterProvider", configuration -> new S3DataLakeWriterProvider().create(configuration)),
                 Named.of("S3PartitionedReaderProvider", configuration -> new S3PartitionedReaderProvider().create(configuration)),
-                Named.of("S3DataMartWriterProvider", configuration -> new S3DataMartWriterProvider().create(configuration)));
+                Named.of("S3DataMartWriterProvider", configuration -> new S3DataMartWriterProvider().create(configuration)),
+                Named.of("S3HealthProbeProvider", configuration -> new S3HealthProbeProvider().create(configuration)));
     }
 
     private static PluginConfiguration.Builder configuration() {
