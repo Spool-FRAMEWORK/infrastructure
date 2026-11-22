@@ -101,6 +101,21 @@ PollSource<byte[]> source = new HTTPPollSource(
 
 The source sets a 5-second connect timeout and a 10-second read timeout and expects HTTP 200.
 
+When the source answers 429 or 503 saying how long to wait, `fetch` throws `PieceAsksToWaitException` with the time
+to call again, which the monitor of the piece uses to open its circuit until then. By default the wait comes from the
+`Retry-After` header, in seconds or as an HTTP date, and is cut to one hour. A `RetryAfter` says where else it comes
+from (a header or a field of the JSON body), in which format and the longest wait accepted:
+
+```java
+PollSource<byte[]> source = new HTTPPollSource("https://api.example.com/records", "my-source-id",
+        new RetryAfter(new RetryAfterLocation.Header("X-RateLimit-Reset"), RetryAfterFormat.EPOCH_SECONDS,
+                Duration.ofMinutes(10)),
+        Clock.systemUTC());
+```
+
+The `HTTP` plugin reads the same from the optional keys `retryAfterHeader`, `retryAfterField`, `retryAfterFormat` and
+`maxRetryAfter`.
+
 ---
 
 ### File System Inbox
@@ -189,7 +204,7 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Envelope headers, remove | `EnvelopeHeaderRemoverProvider` | `POSTGRESQL` | same as the envelope headers writer |
 | Data mart, write | `DataMartWriterProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3` | `FILE_SYSTEM` and `RAW_FILE_SYSTEM`: `path`. `S3`: `bucket`, `region`, `endpoint` |
 | Quarantine | `QuarantineRepositoryProvider` | `FILE_SYSTEM` | `path` |
-| Poll source | `PollSourceProvider` | `HTTP` | `sourceId`, `url` |
+| Poll source | `PollSourceProvider` | `HTTP` | `sourceId`, `url`; optional `retryAfterHeader`, `retryAfterField`, `retryAfterFormat`, `maxRetryAfter` |
 | Stream source | `StreamSourceProvider` | `IN_MEMORY` | `sourceId`, `eventClassName` |
 | Normalizer (media type) | `NormalizerProvider` | `JSON`, `JSON_ARRAY`, `JSON_OBJECT`, `EVENT_CLASS`, `EVENT_CLASS_ARRAY`, `PDF` | `rootPath`, `rules`, set by the crawler |
 | Error router | `ErrorRouterProvider` | `DEFAULT` | none |
