@@ -7,6 +7,7 @@ import software.spool.core.model.vo.PartitionKey;
 import software.spool.infrastructure.adapter.dataLake.PayloadFormat;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -40,17 +41,25 @@ final class S3DataLakeLayout {
         return LAYER + SEPARATOR + String.join(SEPARATOR, KeyEntries.split(partition.value())) + SEPARATOR + idempotencyKey.value();
     }
 
-    static String prefixOf(PartitionKey partition) {
-        return LAYER + SEPARATOR + KeyEntries.split(partition.value()).stream()
+    static String prefixOf(List<String> partitionEntries) {
+        return LAYER + SEPARATOR + partitionEntries.stream()
                 .map(entry -> entry + SEPARATOR)
                 .collect(Collectors.joining());
     }
 
     static PartitionKey partitionOf(String objectKey) {
+        return new PartitionKey(KeyEntries.join(folderEntriesOf(objectKey)));
+    }
+
+    static boolean isInAFolderWithEveryEntry(String objectKey, List<String> partitionEntries) {
+        return folderEntriesOf(objectKey).containsAll(partitionEntries);
+    }
+
+    private static List<String> folderEntriesOf(String objectKey) {
         String folder = objectKey.substring(LAYER.length() + SEPARATOR.length(), objectKey.lastIndexOf(SEPARATOR) + 1);
-        return new PartitionKey(KeyEntries.join(Arrays.stream(folder.split(SEPARATOR))
+        return Arrays.stream(folder.split(SEPARATOR))
                 .filter(entry -> !entry.isEmpty())
-                .toList()));
+                .toList();
     }
 
     static boolean isHeaderKey(String objectKey) {

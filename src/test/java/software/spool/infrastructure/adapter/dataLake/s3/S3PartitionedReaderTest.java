@@ -138,6 +138,35 @@ class S3PartitionedReaderTest {
     }
 
     @Test
+    void read_partitionKeptBehindTheDateEntries_readsItsEnvelopesWithTheirWholePartition() {
+        PartitionKey dated = PartitionKey.ofEntriesWithoutDate().with("year", "2026").with("month", "11")
+                .with("source", "payments").with("eventType", "Payment").build();
+        write(dated, json("payment-1", "payments"));
+
+        List<PartitionedRecord<GenericRecord>> read = read(PartitionKey.ofEntriesWithoutDate().with("source", "payments").build());
+
+        assertThat(read).extracting(PartitionedRecord::partitionKey).containsExactly(dated);
+    }
+
+    @Test
+    void read_partitionKeptBehindTheDateEntries_doesNotReadAPathThatLacksOneOfItsEntries() {
+        PartitionKey payments = PartitionKey.ofEntriesWithoutDate().with("year", "2026").with("source", "payments")
+                .with("eventType", "Payment").build();
+        PartitionKey refunds = PartitionKey.ofEntriesWithoutDate().with("year", "2026").with("source", "payments")
+                .with("eventType", "Refund").build();
+        PartitionKey similarSource = PartitionKey.ofEntriesWithoutDate().with("year", "2026").with("source", "payments2")
+                .with("eventType", "Payment").build();
+        write(payments, json("payment-1", "payments"));
+        write(refunds, json("refund-1", "payments"));
+        write(similarSource, json("payment-2", "payments2"));
+
+        List<PartitionedRecord<GenericRecord>> read = read(PartitionKey.ofEntriesWithoutDate().with("source", "payments")
+                .with("eventType", "Payment").build());
+
+        assertThat(read).extracting(PartitionedRecord::partitionKey).containsExactly(payments);
+    }
+
+    @Test
     void read_moreObjectsThanOneListingPage_readsThemAll() {
         int envelopes = 1001;
         writer().write(IntStream.range(0, envelopes)

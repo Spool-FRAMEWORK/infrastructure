@@ -11,6 +11,7 @@ import software.spool.core.adapter.jackson.PayloadDeserializerFactory;
 import software.spool.core.adapter.logging.LoggerFactory;
 import software.spool.core.exception.DataLakeReadException;
 import software.spool.core.model.vo.EnvelopeHeader;
+import software.spool.core.model.vo.KeyEntries;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.core.port.logging.Logger;
 import software.spool.core.port.serde.PayloadDeserializer;
@@ -33,6 +34,10 @@ import java.util.stream.Stream;
 /**
  * Reads the envelopes of a partition of bronze, and of the partitions below it, from a bucket laid out by
  * {@link S3DataLakeLayout}, several objects at a time on the threads of a {@link BoundedConcurrency}.
+ *
+ * <p>The leading entries of the partition are followed as a prefix while the bucket has objects under them. From the
+ * first one it has not, such as {@code source=payments} kept behind the date entries, the objects below the last
+ * prefix are read when their folder has every remaining entry, wherever it is in their path.</p>
  *
  * <p>The header of each envelope comes from the metadata of its payload object or, when it did not fit there, from
  * the object next to it. A payload without a header is an envelope still being written, and is skipped. Silver is not
@@ -58,12 +63,29 @@ public class S3PartitionedReader implements PartitionedReader {
             throw new UnsupportedOperationException("The S3 data lake cannot be read by an " + mountTarget.mode()
                     + " mount: it keeps only bronze, and that mount reads silver");
         }
-        List<String> objectKeys = objectKeysUnder(S3DataLakeLayout.prefixOf(mountTarget.sourceKey()));
+        List<String> objectKeys = objectKeysOf(mountTarget.sourceKey());
         Set<String> existingKeys = new HashSet<>(objectKeys);
         List<String> envelopeKeys = objectKeys.stream().filter(key -> !S3DataLakeLayout.isHeaderKey(key)).toList();
         return concurrency.map(sliceOf(envelopeKeys, mountTarget.slice()),
                         key -> recordAt(key, existingKeys, mountTarget.sourceKey()))
                 .flatMap(Optional::stream);
+    }
+
+    private List<String> objectKeysOf(PartitionKey partition) {
+        List<String> entries = KeyEntries.split(partition.value());
+        int leadingEntries = 0;
+        while (leadingEntries < entries.size() && hasObjectsUnder(S3DataLakeLayout.prefixOf(entries.subList(0, leadingEntries + 1)))) {
+            leadingEntries++;
+        }
+        List<String> remainingEntries = entries.subList(leadingEntries, entries.size());
+        return objectKeysUnder(S3DataLakeLayout.prefixOf(entries.subList(0, leadingEntries))).stream()
+                .filter(key -> S3DataLakeLayout.isInAFolderWithEveryEntry(key, remainingEntries))
+                .toList();
+    }
+
+    private boolean hasObjectsUnder(String prefix) {
+        return !s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(bucket).prefix(prefix).maxKeys(1).build())
+                .contents().isEmpty();
     }
 
     private List<String> objectKeysUnder(String prefix) {

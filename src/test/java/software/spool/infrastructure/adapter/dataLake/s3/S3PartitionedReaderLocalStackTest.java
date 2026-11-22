@@ -110,6 +110,26 @@ class S3PartitionedReaderLocalStackTest {
         assertThat(read.get("report-1").record().get("payload")).isEqualTo(PDF);
     }
 
+    @Test
+    void read_sourcePartitionWrittenBehindTheDateEntriesLikeTheIngesterDoes_givesItsEnvelopesOnly() {
+        PartitionKey payments = PartitionKey.ofEntries().with("source", "payments").with("eventType", "Payment").build();
+        PartitionKey refunds = PartitionKey.ofEntries().with("source", "refunds").with("eventType", "Refund").build();
+        new S3DataLakeWriter(s3, BUCKET).write(List.of(
+                new PartitionedEnvelope(payments, envelope("payment-1", "payments", MediaType.of("application/json"),
+                        "{\"id\":\"payment-1\"}".getBytes(StandardCharsets.UTF_8))),
+                new PartitionedEnvelope(refunds, envelope("refund-1", "refunds", MediaType.of("application/json"),
+                        "{\"id\":\"refund-1\"}".getBytes(StandardCharsets.UTF_8))))).toList();
+
+        List<PartitionedRecord<GenericRecord>> read = new S3PartitionedReader(s3, BUCKET, concurrency)
+                .read(MountTarget.transformation("payments", PartitionKey.ofEntriesWithoutDate().with("source", "payments").build()))
+                .toList();
+
+        assertThat(read).singleElement().satisfies(record -> {
+            assertThat(record.partitionKey()).isEqualTo(payments);
+            assertThat(record.record().getNested("payload").getString("id")).isEqualTo("payment-1");
+        });
+    }
+
     private static Envelope envelope(String key, String source, MediaType mediaType, byte[] payload) {
         return new Envelope(IdempotencyKey.of(key), new EventMetadata().set(EventMetadataKey.SOURCE, source), mediaType,
                 payload, EnvelopeStatus.PERSISTED, 0, NOW, NOW);
