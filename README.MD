@@ -191,7 +191,7 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Normalizer (media type) | `NormalizerProvider` | `JSON`, `JSON_ARRAY`, `JSON_OBJECT`, `EVENT_CLASS`, `EVENT_CLASS_ARRAY`, `PDF` | `rootPath`, `rules`, set by the crawler |
 | Error router | `ErrorRouterProvider` | `DEFAULT` | none |
 | Terraform of a piece | `ProvisioningProvider` | `IN_MEMORY`, `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA` | the configuration of the piece: see below |
-| Health check of a piece | `HealthProbeProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3` | the configuration of the piece |
+| Health check of a piece | `HealthProbeProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA` | the configuration of the piece |
 | Authentication | `RequestAuthenticatorProvider` | `OIDC`, `HMAC_SIGNATURE` | `OIDC`: `issuer`, `audience`, `jwksUri` and `rolesClaim` optional. `HMAC_SIGNATURE`: `header`, `secret`, `timestampHeader`, `tolerance` and `roles` optional |
 
 The `S3` adapters also read `accessKeyEnv` and `secretKeyEnv`, the names of the environment variables with the
