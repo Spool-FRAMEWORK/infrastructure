@@ -13,6 +13,8 @@ import software.spool.core.model.vo.Envelope;
 import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.crawler.api.port.InboxWriter;
 
+import java.util.Arrays;
+
 public class S3InboxWriter implements InboxWriter {
 
     private static final String INBOX_PREFIX = "inbox/";
@@ -34,7 +36,41 @@ public class S3InboxWriter implements InboxWriter {
         if (existsInAnyStatus(envelope.idempotencyKey())) {
             throw new DuplicateEventException(envelope.idempotencyKey());
         }
+        write(objectKey, envelope);
+        return envelope.idempotencyKey();
+    }
 
+    /**
+     * Writes the new envelope as captured before removing the one in quarantine, so a failure in between leaves both
+     * rather than none.
+     */
+    @Override
+    public Receipt receiveReplacingQuarantined(Envelope envelope) throws InboxWriteException, DuplicateEventException {
+        String quarantined = INBOX_PREFIX + EnvelopeStatus.QUARANTINED.name() + "/" + envelope.idempotencyKey().value();
+        if (!objectExists(quarantined)) return Receipt.stored(receive(envelope));
+        try {
+            byte[] stored = s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(bucketName).key(quarantined).build())
+                    .asByteArray();
+            if (Arrays.equals(mapper.readValue(stored, S3EnvelopeDto.class).payload(), envelope.payload())) {
+                throw new DuplicateEventException(envelope.idempotencyKey());
+            }
+        } catch (DuplicateEventException e) {
+            throw e;
+        } catch (S3Exception e) {
+            throw new InboxWriteException("Failed to read the envelope in quarantine from S3: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new InboxWriteException("Failed to read the envelope in quarantine: " + e.getMessage(), e);
+        }
+        write(INBOX_PREFIX + EnvelopeStatus.CAPTURED.name() + "/" + envelope.idempotencyKey().value(), envelope);
+        try {
+            s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucketName).key(quarantined).build());
+        } catch (S3Exception e) {
+            throw new InboxWriteException("Failed to remove the envelope in quarantine from S3: " + e.getMessage(), e);
+        }
+        return Receipt.replacedQuarantined(envelope.idempotencyKey());
+    }
+
+    private void write(String objectKey, Envelope envelope) {
         try {
             S3EnvelopeDto dto = new S3EnvelopeDto(
                     envelope.idempotencyKey().value(),
@@ -56,11 +92,6 @@ public class S3InboxWriter implements InboxWriter {
                             .build(),
                     RequestBody.fromBytes(body)
             );
-
-            return envelope.idempotencyKey();
-
-        } catch (DuplicateEventException e) {
-            throw e;
         } catch (S3Exception e) {
             throw new InboxWriteException("Failed to write envelope to S3: " + e.getMessage(), e);
         } catch (Exception e) {
