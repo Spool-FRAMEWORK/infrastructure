@@ -224,6 +224,40 @@ public abstract class QuarantineRepositoryContract {
     }
 
     @Test
+    void resolve_sameRecordFromTwoThreadsAtOnceManyTimes_theLoserAlwaysGetsAConflict() throws Exception {
+        int rounds = 1000;
+        ExecutorService threads = Executors.newFixedThreadPool(2);
+        try {
+            for (int round = 0; round < rounds; round++) {
+                IdempotencyKey key = IdempotencyKey.of("race-" + round);
+                repository().save(validationRecord(key));
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<Boolean>> results = new ArrayList<>();
+                for (int attempt = 0; attempt < 2; attempt++) {
+                    results.add(threads.submit(() -> {
+                        start.await();
+                        try {
+                            repository().resolve(validationRecord(key).resolve(QuarantineResolution.purged(RESOLVED_AT, ANA)));
+                            return true;
+                        } catch (QuarantineConflictException e) {
+                            return false;
+                        }
+                    }));
+                }
+                start.countDown();
+                int succeeded = 0;
+                for (Future<Boolean> result : results) {
+                    if (result.get(10, TimeUnit.SECONDS)) succeeded++;
+                }
+                assertThat(succeeded).as("round %d", round).isEqualTo(1);
+                assertThat(repository().find(key).orElseThrow().history()).hasSize(1);
+            }
+        } finally {
+            threads.shutdownNow();
+        }
+    }
+
+    @Test
     void findByStatus_page_returnsTheRecordsInKeyOrderAndTheKeyToGoOn() {
         repository().save(validationRecord(SECOND_KEY));
         repository().save(validationRecord(FIRST_KEY));
