@@ -258,6 +258,55 @@ public abstract class QuarantineRepositoryContract {
     }
 
     @Test
+    void findByStatus_whileARecordOfTheStatusIsResolvedManyTimes_listsTheOthersWithoutFailing() throws Exception {
+        int rounds = 1000;
+        ExecutorService threads = Executors.newFixedThreadPool(2);
+        try {
+            for (int round = 0; round < rounds; round++) {
+                IdempotencyKey resolved = IdempotencyKey.of("a-" + round);
+                IdempotencyKey kept = IdempotencyKey.of("b-" + round);
+                repository().save(validationRecord(resolved));
+                repository().save(validationRecord(kept));
+                CountDownLatch start = new CountDownLatch(1);
+                Future<List<QuarantinedRecord>> listing = threads.submit(() -> {
+                    start.await();
+                    List<QuarantinedRecord> listed = new ArrayList<>(repository().findByStatus(QuarantineStatus.PENDING));
+                    listed.addAll(everyPageOf(QuarantineStatus.PENDING));
+                    return listed;
+                });
+                Future<?> resolution = threads.submit(() -> {
+                    start.await();
+                    repository().resolve(validationRecord(resolved).resolve(QuarantineResolution.purged(RESOLVED_AT, ANA)));
+                    return null;
+                });
+                start.countDown();
+                resolution.get(10, TimeUnit.SECONDS);
+                List<QuarantinedRecord> listed = listing.get(10, TimeUnit.SECONDS);
+
+                assertThat(listed).as("round %d", round).extracting(QuarantinedRecord::status)
+                        .containsOnly(QuarantineStatus.PENDING);
+                assertThat(listed).as("round %d", round).extracting(QuarantinedRecord::idempotencyKey)
+                        .isSubsetOf(resolved, kept)
+                        .filteredOn(kept::equals).hasSize(2);
+                repository().resolve(validationRecord(kept).resolve(QuarantineResolution.purged(RESOLVED_AT, ANA)));
+            }
+        } finally {
+            threads.shutdownNow();
+        }
+    }
+
+    private List<QuarantinedRecord> everyPageOf(QuarantineStatus status) {
+        List<QuarantinedRecord> records = new ArrayList<>();
+        QuarantinePage page = repository().findByStatus(QuarantinePageRequest.first(status, 1));
+        records.addAll(page.records());
+        while (page.next().isPresent()) {
+            page = repository().findByStatus(new QuarantinePageRequest(status, 1, page.next()));
+            records.addAll(page.records());
+        }
+        return records;
+    }
+
+    @Test
     void findByStatus_page_returnsTheRecordsInKeyOrderAndTheKeyToGoOn() {
         repository().save(validationRecord(SECOND_KEY));
         repository().save(validationRecord(FIRST_KEY));

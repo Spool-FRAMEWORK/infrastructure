@@ -36,6 +36,7 @@ public class FileSystemQuarantineRepository implements QuarantineRepository {
     private static final String FILE_EXTENSION = ".json";
     private static final String CLAIM_SUFFIX = ".claimed";
     private static final String WRITING_SUFFIX = ".writing";
+    private static final String REMOVING_SUFFIX = ".removing";
 
     private final Path basePath;
     private final RecordSerializer<QuarantinedRecord> serializer = RecordSerializerFactory.record();
@@ -83,7 +84,7 @@ public class FileSystemQuarantineRepository implements QuarantineRepository {
             Path statusFolder = folderOf(resolvedRecord.status());
             Files.createDirectories(statusFolder);
             writeAtOnce(statusFolder.resolve(fileNameOf(idempotencyKey)), serializer.serialize(resolvedRecord));
-            Files.delete(pendingFile);
+            removeAtOnce(pendingFile);
         } catch (IOException e) {
             throw new QuarantineRepositoryException(
                     "Quarantine record of " + idempotencyKey.value() + " could not be resolved in " + basePath, e);
@@ -103,7 +104,8 @@ public class FileSystemQuarantineRepository implements QuarantineRepository {
         if (!Files.exists(statusFolder)) return List.of();
         try (Stream<Path> files = Files.list(statusFolder)) {
             return files.filter(file -> file.getFileName().toString().endsWith(FILE_EXTENSION))
-                    .map(this::read)
+                    .map(this::readIfThere)
+                    .flatMap(Optional::stream)
                     .toList();
         } catch (IOException e) {
             throw new QuarantineRepositoryException("Quarantine records could not be listed in " + statusFolder, e);
@@ -126,11 +128,13 @@ public class FileSystemQuarantineRepository implements QuarantineRepository {
         } catch (IOException e) {
             throw new QuarantineRepositoryException("Quarantine records could not be listed in " + statusFolder, e);
         }
-        List<QuarantinedRecord> page = keys.stream().limit(request.limit())
-                .map(key -> read(statusFolder.resolve(key + FILE_EXTENSION)))
+        List<String> window = keys.stream().limit(request.limit()).toList();
+        List<QuarantinedRecord> page = window.stream()
+                .map(key -> readIfThere(statusFolder.resolve(key + FILE_EXTENSION)))
+                .flatMap(Optional::stream)
                 .toList();
         return new QuarantinePage(page, keys.size() > request.limit()
-                ? Optional.of(page.getLast().idempotencyKey())
+                ? Optional.of(IdempotencyKey.of(window.getLast()))
                 : Optional.empty());
     }
 
@@ -184,19 +188,17 @@ public class FileSystemQuarantineRepository implements QuarantineRepository {
         Files.move(beingWritten, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     }
 
+    private static void removeAtOnce(Path file) throws IOException {
+        Path beingRemoved = file.resolveSibling(file.getFileName() + REMOVING_SUFFIX);
+        Files.move(file, beingRemoved, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        Files.delete(beingRemoved);
+    }
+
     private Optional<QuarantinedRecord> readIfThere(Path file) {
         try {
             return Optional.of(deserializer.deserialize(Files.readAllBytes(file)));
         } catch (NoSuchFileException e) {
             return Optional.empty();
-        } catch (IOException e) {
-            throw new QuarantineRepositoryException("Quarantine record could not be read from " + file, e);
-        }
-    }
-
-    private QuarantinedRecord read(Path file) {
-        try {
-            return deserializer.deserialize(Files.readAllBytes(file));
         } catch (IOException e) {
             throw new QuarantineRepositoryException("Quarantine record could not be read from " + file, e);
         }
