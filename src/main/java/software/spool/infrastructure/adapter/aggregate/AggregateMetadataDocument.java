@@ -10,7 +10,6 @@ import software.spool.mounter.api.model.AggregateMetadata;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -22,7 +21,6 @@ record AggregateMetadataDocument(String dataMart, String aggregate, List<String>
     private static final RecordSerializer<Object> SERIALIZER = RecordSerializerFactory.record();
     private static final PayloadDeserializer<AggregateMetadataDocument> DESERIALIZER =
             PayloadDeserializerFactory.json().as(AggregateMetadataDocument.class);
-    private static final PayloadDeserializer<String[]> SOURCES = PayloadDeserializerFactory.json().as(String[].class);
 
     static byte[] serialize(AggregateMetadata metadata) {
         return SERIALIZER.serialize(new AggregateMetadataDocument(metadata.dataMart(), metadata.aggregate().value(),
@@ -35,13 +33,5 @@ record AggregateMetadataDocument(String dataMart, String aggregate, List<String>
         return new AggregateMetadata(document.dataMart(), new PartitionKey(document.aggregate()),
                 document.sources().stream().map(PartitionKey::new).collect(Collectors.toSet()), document.records(),
                 document.updatedAt(), document.state(), Optional.ofNullable(document.publishedState()));
-    }
-
-    static byte[] serializeSources(Set<PartitionKey> sources) {
-        return SERIALIZER.serialize(sources.stream().map(PartitionKey::value).sorted().toList());
-    }
-
-    static Set<PartitionKey> deserializeSources(byte[] content) {
-        return java.util.Arrays.stream(SOURCES.deserialize(content)).map(PartitionKey::new).collect(Collectors.toSet());
     }
 }

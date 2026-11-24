@@ -8,9 +8,9 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.infrastructure.adapter.s3.S3ObjectKeys;
 import software.spool.mounter.api.model.AggregateMetadata;
+import software.spool.mounter.api.model.ConsumedPartition;
 import software.spool.mounter.api.port.AggregateMetadataRepository;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -47,18 +47,17 @@ public class S3AggregateMetadataRepository implements AggregateMetadataRepositor
     }
 
     @Override
-    public Set<PartitionKey> consumedSources(String dataMart) {
+    public Set<ConsumedPartition> consumedSources(String dataMart) {
         return get(AggregateMetadataLayout.consumedSourcesKeyOf(dataMart))
-                .map(AggregateMetadataDocument::deserializeSources)
+                .map(ConsumedPartitionsDocument::deserialize)
                 .orElse(Set.of());
     }
 
     @Override
-    public void markConsumed(String dataMart, Set<PartitionKey> sources) {
+    public void markConsumed(String dataMart, Set<ConsumedPartition> sources) {
         if (sources.isEmpty()) return;
-        Set<PartitionKey> consumed = new HashSet<>(consumedSources(dataMart));
-        consumed.addAll(sources);
-        put(AggregateMetadataLayout.consumedSourcesKeyOf(dataMart), AggregateMetadataDocument.serializeSources(consumed));
+        put(AggregateMetadataLayout.consumedSourcesKeyOf(dataMart),
+                ConsumedPartitionsDocument.serialize(ConsumedPartitionsDocument.merged(consumedSources(dataMart), sources)));
     }
 
     private Optional<byte[]> get(String key) {

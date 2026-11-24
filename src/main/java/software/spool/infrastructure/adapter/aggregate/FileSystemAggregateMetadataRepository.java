@@ -2,6 +2,7 @@ package software.spool.infrastructure.adapter.aggregate;
 
 import software.spool.core.model.vo.PartitionKey;
 import software.spool.mounter.api.model.AggregateMetadata;
+import software.spool.mounter.api.model.ConsumedPartition;
 import software.spool.mounter.api.port.AggregateMetadataRepository;
 
 import java.io.IOException;
@@ -9,7 +10,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -59,18 +59,16 @@ public class FileSystemAggregateMetadataRepository implements AggregateMetadataR
     }
 
     @Override
-    public Set<PartitionKey> consumedSources(String dataMart) {
+    public Set<ConsumedPartition> consumedSources(String dataMart) {
         Path file = basePath.resolve(AggregateMetadataLayout.consumedSourcesKeyOf(dataMart));
-        return Files.exists(file) ? AggregateMetadataDocument.deserializeSources(read(file)) : Set.of();
+        return Files.exists(file) ? ConsumedPartitionsDocument.deserialize(read(file)) : Set.of();
     }
 
     @Override
-    public void markConsumed(String dataMart, Set<PartitionKey> sources) {
+    public void markConsumed(String dataMart, Set<ConsumedPartition> sources) {
         if (sources.isEmpty()) return;
-        Set<PartitionKey> consumed = new HashSet<>(consumedSources(dataMart));
-        consumed.addAll(sources);
         write(basePath.resolve(AggregateMetadataLayout.consumedSourcesKeyOf(dataMart)),
-                AggregateMetadataDocument.serializeSources(consumed));
+                ConsumedPartitionsDocument.serialize(ConsumedPartitionsDocument.merged(consumedSources(dataMart), sources)));
     }
 
     private static byte[] read(Path file) {
