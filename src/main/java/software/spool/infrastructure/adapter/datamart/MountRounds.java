@@ -4,15 +4,16 @@ import software.spool.core.model.vo.IdempotencyKey;
 import software.spool.mounter.api.port.MountTarget;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
-import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -24,34 +25,33 @@ import java.util.concurrent.TimeUnit;
  * The rounds of the mounts on a data mart, and the list of what each mount wrote, kept in the data mart itself under
  * {@code .spool/written/}, out of the folders of its layers, so no reader takes them for data.
  *
- * <p>A mount runs one round at a time, wherever it runs: a round takes the turn of its mount, an object that only one
- * round can create, before it starts, waits while another round holds it, and renews it while it is open. A turn that is
- * not renewed in time, because its process stopped, is taken by the next round, and only one round can take it.</p>
+ * <p>A mount runs one round at a time, wherever it runs. A round holds the turn of its mount, a numbered object that
+ * only one round can create, and renews it while it is open by changing its content. A round that waits takes the turn,
+ * by creating the next number, only after it has seen the same content unchanged for as long as the turn says it
+ * lasts, measured by its own process, so the clocks of different processes are never compared. Ending a round removes its turn and any
+ * older one, so nothing of the turns is left behind.</p>
  *
  * <p>While a round is open, every object written for its target, or for a part of its scope, is noted as the mount's,
- * and saved every few objects. When the round ends well, what the list of the mount had, or what a round of a stopped
- * process saved, and was not written again, is removed, and the list becomes what the round wrote; nothing outside them
- * is ever touched, so mounts that write to the same partition never remove each other's objects. When the round fails,
- * nothing is removed and what it wrote is added to the list. A round that lost its turn removes nothing and keeps no
- * list, and leaves what it wrote saved for the round that holds the turn.</p>
- *
- * <p>Taking the turn of a stopped round leaves a small marker under {@code turn-taken/}, named after that round, so a
- * second round that read the same expired turn cannot take it too.</p>
+ * and saved by partition every few objects. When the round ends well, what the list of the mount had, or what a round
+ * of a stopped process saved, and was not written again, is removed, and the list becomes what the round wrote. It is
+ * done one partition at a time, so a round never holds in memory more than one partition and the few objects it has
+ * not saved yet. Nothing outside the lists is ever touched, so mounts that write to the same partition never remove
+ * each other's objects. When the round fails, nothing is removed and what it wrote is added to the list. A round that
+ * lost its turn removes nothing and keeps no list, and leaves what it wrote saved for the round that holds the
+ * turn.</p>
  */
 final class MountRounds {
     private static final String ROOT = ".spool/written/";
-    private static final String LISTS = "/lists/";
-    private static final String ROUNDS = "/rounds/";
+    private static final String LISTS = "/lists";
+    private static final String ROUNDS = "/rounds";
     private static final String TURN = "/turn";
-    private static final String TAKEN = "/turn-taken/";
     private static final String SEPARATOR = "/";
-    private static final String LIST_EXTENSION = ".txt";
+    private static final String EXTENSION = ".txt";
     private static final String LINE = "\n";
     private static final String FIELD = " ";
 
     private final DataMartStore store;
     private final MountRoundSettings settings;
-    private final Clock clock;
     private final Map<MountTarget, OpenRound> open = new ConcurrentHashMap<>();
     private final ScheduledExecutorService renewals = Executors.newSingleThreadScheduledExecutor(task -> {
         Thread thread = new Thread(task, "spool-mount-round-renewal");
@@ -60,21 +60,16 @@ final class MountRounds {
     });
 
     MountRounds(DataMartStore store, MountRoundSettings settings) {
-        this(store, settings, Clock.systemUTC());
-    }
-
-    MountRounds(DataMartStore store, MountRoundSettings settings, Clock clock) {
         this.store = store;
         this.settings = settings;
-        this.clock = clock;
     }
 
     /** Waits for the turn of the mount of the target, and opens a round with it. */
     void begin(MountTarget target) {
         String owner = ownerFolder(target);
         String id = UUID.randomUUID().toString();
-        takeTurn(owner, id);
-        OpenRound round = new OpenRound(owner, id);
+        long turn = takeTurn(owner, id);
+        OpenRound round = new OpenRound(owner, id, turn);
         round.renewal = renewals.scheduleAtFixedRate(round::renew, settings.renewEvery().toMillis(),
                 settings.renewEvery().toMillis(), TimeUnit.MILLISECONDS);
         open.put(target, round);
@@ -91,17 +86,19 @@ final class MountRounds {
         OpenRound round = open.remove(target);
         if (round == null) return;
         round.stopRenewing();
+        round.saveUnsaved();
         if (!holdsTurn(round)) {
-            round.saveUnsaved();
             throw new IllegalStateException("Round of " + target.qualifiedDataMart() + " for " + target.sourceKey().value()
                     + " ended after another round took its turn; nothing was removed");
         }
-        Map<String, Set<String>> before = before(round);
-        Map<String, Set<String>> written = round.byFolder();
-        before.forEach((folder, names) -> names.stream()
-                .filter(name -> !written.getOrDefault(folder, Set.of()).contains(name))
-                .forEach(name -> store.delete(folder + SEPARATOR + name)));
-        keepList(round.owner, written, before.keySet());
+        Saved saved = savedOf(round);
+        for (String folder : saved.folders()) {
+            Set<String> written = namesIn(saved.ownParts(folder));
+            Set<String> before = namesIn(saved.list(folder));
+            before.addAll(namesIn(saved.otherParts(folder)));
+            before.stream().filter(name -> !written.contains(name)).forEach(name -> store.delete(folder + SEPARATOR + name));
+            keepList(round.owner, folder, written);
+        }
         end(round);
     }
 
@@ -109,72 +106,99 @@ final class MountRounds {
         OpenRound round = open.remove(target);
         if (round == null) return;
         round.stopRenewing();
-        if (!holdsTurn(round)) {
-            round.saveUnsaved();
-            return;
+        round.saveUnsaved();
+        if (!holdsTurn(round)) return;
+        Saved saved = savedOf(round);
+        for (String folder : saved.folders()) {
+            Set<String> kept = namesIn(saved.list(folder));
+            kept.addAll(namesIn(saved.ownParts(folder)));
+            kept.addAll(namesIn(saved.otherParts(folder)));
+            keepList(round.owner, folder, kept);
         }
-        Map<String, Set<String>> kept = before(round);
-        round.byFolder().forEach((folder, names) -> kept.computeIfAbsent(folder, ignored -> new HashSet<>()).addAll(names));
-        keepList(round.owner, kept, kept.keySet());
         end(round);
     }
 
-    private void takeTurn(String owner, String id) {
-        String turn = owner + TURN;
+    private long takeTurn(String owner, String id) {
+        Optional<Sighting> sighting = Optional.empty();
         while (true) {
-            if (store.createIfAbsent(turn, turnOf(id))) return;
-            Optional<Turn> held = store.read(turn).map(Turn::of);
-            if (held.isPresent() && held.get().expiresAt().isBefore(clock.instant())
-                    && store.createIfAbsent(owner + TAKEN + held.get().id(), id.getBytes(StandardCharsets.UTF_8))) {
-                store.write(turn, turnOf(id));
-                return;
+            TreeMap<Long, String> turns = turnsOf(owner);
+            if (turns.isEmpty()) {
+                if (store.createIfAbsent(turnPath(owner, 0), turnContent(id, 0))) return 0;
+                continue;
             }
-            if (held.isPresent()) pause();
+            long latest = turns.lastKey();
+            Optional<String> content = store.read(turns.get(latest)).map(MountRounds::text);
+            if (content.isEmpty()) continue;
+            if (sighting.filter(seen -> seen.isOf(latest, content.get())).isEmpty()) {
+                sighting = Optional.of(new Sighting(latest, content.get(), settings.elapsed().getAsLong()));
+            } else if (sighting.get().unchangedFor(settings.elapsed().getAsLong()).compareTo(sighting.get().lasts()) >= 0
+                    && store.createIfAbsent(turnPath(owner, latest + 1), turnContent(id, 0))) {
+                removeTurnsBelow(owner, latest + 1);
+                return latest + 1;
+            }
+            pause();
         }
     }
 
     private boolean holdsTurn(OpenRound round) {
-        return !round.lost && store.read(round.owner + TURN).map(Turn::of).filter(held -> held.id().equals(round.id)).isPresent();
+        if (round.lost) return false;
+        TreeMap<Long, String> turns = turnsOf(round.owner);
+        return !turns.isEmpty() && turns.lastKey() == round.turn
+                && store.read(turns.get(round.turn)).map(MountRounds::text)
+                .filter(content -> content.startsWith(round.id + FIELD)).isPresent();
     }
 
     private void end(OpenRound round) {
-        store.objectsUnder(round.owner + ROUNDS.substring(0, ROUNDS.length() - SEPARATOR.length())).forEach(store::delete);
-        if (holdsTurn(round)) store.delete(round.owner + TURN);
+        store.objectsUnder(round.owner + ROUNDS).forEach(store::delete);
+        if (holdsTurn(round)) removeTurnsBelow(round.owner, round.turn + 1);
     }
 
-    private Map<String, Set<String>> before(OpenRound current) {
-        Map<String, Set<String>> before = new HashMap<>();
-        String lists = current.owner + LISTS;
-        for (String list : store.objectsUnder(lists.substring(0, lists.length() - SEPARATOR.length()))) {
-            String folder = list.substring(lists.length(), list.length() - LIST_EXTENSION.length());
-            before.computeIfAbsent(folder, ignored -> new HashSet<>()).addAll(lines(list));
-        }
-        String rounds = current.owner + ROUNDS;
-        for (String saved : store.objectsUnder(rounds.substring(0, rounds.length() - SEPARATOR.length()))) {
-            if (saved.startsWith(current.prefix)) continue;
-            lines(saved).forEach(path -> before.computeIfAbsent(folderOf(path), ignored -> new HashSet<>()).add(nameOf(path)));
-        }
-        return before;
+    private void removeTurnsBelow(String owner, long turn) {
+        turnsOf(owner).headMap(turn).values().forEach(store::delete);
     }
 
-    private void keepList(String owner, Map<String, Set<String>> byFolder, Set<String> foldersBefore) {
-        String lists = owner + LISTS;
-        byFolder.forEach((folder, names) -> store.write(lists + folder + LIST_EXTENSION,
-                String.join(LINE, names).getBytes(StandardCharsets.UTF_8)));
-        foldersBefore.stream()
-                .filter(folder -> !byFolder.containsKey(folder))
-                .forEach(folder -> store.delete(lists + folder + LIST_EXTENSION));
+    private TreeMap<Long, String> turnsOf(String owner) {
+        TreeMap<Long, String> turns = new TreeMap<>();
+        for (String path : store.objectsIn(owner + TURN)) {
+            numberOf(nameOf(path)).ifPresent(number -> turns.put(number, path));
+        }
+        return turns;
+    }
+
+    /** Where the lists of the mount and the parts saved by its rounds are, by the partition they are about. */
+    private Saved savedOf(OpenRound round) {
+        Saved saved = new Saved();
+        String lists = round.owner + LISTS + SEPARATOR;
+        for (String list : store.objectsUnder(round.owner + LISTS)) {
+            saved.lists.put(list.substring(lists.length(), list.length() - EXTENSION.length()), list);
+        }
+        String rounds = round.owner + ROUNDS + SEPARATOR;
+        for (String part : store.objectsUnder(round.owner + ROUNDS)) {
+            String inRounds = part.substring(rounds.length());
+            String id = inRounds.substring(0, inRounds.indexOf(SEPARATOR));
+            String folder = folderOf(inRounds.substring(id.length() + SEPARATOR.length()));
+            (id.equals(round.id) ? saved.own : saved.others).computeIfAbsent(folder, ignored -> new ArrayList<>()).add(part);
+        }
+        return saved;
+    }
+
+    private Set<String> namesIn(List<String> paths) {
+        Set<String> names = new HashSet<>();
+        paths.forEach(path -> names.addAll(lines(path)));
+        return names;
+    }
+
+    private void keepList(String owner, String folder, Set<String> names) {
+        String list = owner + LISTS + SEPARATOR + folder + EXTENSION;
+        if (names.isEmpty()) store.delete(list);
+        else store.write(list, String.join(LINE, names).getBytes(StandardCharsets.UTF_8));
     }
 
     private List<String> lines(String path) {
         return store.read(path)
-                .map(content -> new String(content, StandardCharsets.UTF_8))
+                .map(MountRounds::text)
                 .map(text -> text.isEmpty() ? List.<String>of() : List.of(text.split(LINE)))
                 .orElse(List.of());
-    }
-
-    private byte[] turnOf(String id) {
-        return (id + FIELD + clock.instant().plus(settings.turnLasts()).toEpochMilli()).getBytes(StandardCharsets.UTF_8);
     }
 
     private void pause() {
@@ -183,6 +207,29 @@ final class MountRounds {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting for the turn of a mount", e);
+        }
+    }
+
+    private static String text(byte[] content) {
+        return new String(content, StandardCharsets.UTF_8);
+    }
+
+    /** Who holds the turn, how many times it renewed it, and how long it lasts without being renewed. */
+    private byte[] turnContent(String id, long renewals) {
+        return String.join(FIELD, id, String.valueOf(renewals), String.valueOf(settings.turnLasts().toMillis()))
+                .getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static String turnPath(String owner, long number) {
+        return owner + TURN + SEPARATOR + number + EXTENSION;
+    }
+
+    private static OptionalLong numberOf(String name) {
+        if (!name.endsWith(EXTENSION)) return OptionalLong.empty();
+        try {
+            return OptionalLong.of(Long.parseLong(name.substring(0, name.length() - EXTENSION.length())));
+        } catch (NumberFormatException e) {
+            return OptionalLong.empty();
         }
     }
 
@@ -204,56 +251,87 @@ final class MountRounds {
         return path.substring(path.lastIndexOf(SEPARATOR) + SEPARATOR.length());
     }
 
-    /** The round that holds the turn of a mount, and until when, as the turn object says. */
-    private record Turn(String id, Instant expiresAt) {
-        static Turn of(byte[] content) {
-            String[] fields = new String(content, StandardCharsets.UTF_8).split(FIELD);
-            return new Turn(fields[0], Instant.ofEpochMilli(Long.parseLong(fields[1])));
+    /** A turn as a waiting round saw it, and when, by the count of its own process, it first saw it so. */
+    private record Sighting(long turn, String content, long seenAt) {
+        boolean isOf(long otherTurn, String otherContent) {
+            return turn == otherTurn && content.equals(otherContent);
+        }
+
+        Duration unchangedFor(long now) {
+            return Duration.ofNanos(now - seenAt);
+        }
+
+        /** How long the round that holds the turn says it lasts without being renewed. */
+        Duration lasts() {
+            return Duration.ofMillis(Long.parseLong(content.split(FIELD)[2]));
         }
     }
 
-    /** What an open round has written, saved to the data mart every few objects, and its turn. */
+    /** The paths of the lists of a mount and of the parts its rounds saved, by partition folder. */
+    private static final class Saved {
+        private final Map<String, String> lists = new HashMap<>();
+        private final Map<String, List<String>> own = new HashMap<>();
+        private final Map<String, List<String>> others = new HashMap<>();
+
+        Set<String> folders() {
+            Set<String> folders = new HashSet<>(lists.keySet());
+            folders.addAll(own.keySet());
+            folders.addAll(others.keySet());
+            return folders;
+        }
+
+        List<String> list(String folder) {
+            return Optional.ofNullable(lists.get(folder)).map(List::of).orElse(List.of());
+        }
+
+        List<String> ownParts(String folder) {
+            return own.getOrDefault(folder, List.of());
+        }
+
+        List<String> otherParts(String folder) {
+            return others.getOrDefault(folder, List.of());
+        }
+    }
+
+    /** What an open round has written and not saved yet, by partition folder, and its turn. */
     private final class OpenRound {
         private final String owner;
         private final String id;
-        private final String prefix;
-        private final Map<String, Set<String>> written = new HashMap<>();
-        private final List<String> unsaved = new ArrayList<>();
+        private final long turn;
+        private final Map<String, List<String>> unsaved = new HashMap<>();
+        private int unsavedCount;
+        private int saves;
+        private long renewals;
         private ScheduledFuture<?> renewal;
         private volatile boolean lost;
-        private int saves;
 
-        private OpenRound(String owner, String id) {
+        private OpenRound(String owner, String id, long turn) {
             this.owner = owner;
             this.id = id;
-            this.prefix = owner + ROUNDS + id + SEPARATOR;
+            this.turn = turn;
         }
 
         synchronized void note(String path) {
-            written.computeIfAbsent(folderOf(path), ignored -> new HashSet<>()).add(nameOf(path));
-            unsaved.add(path);
-            if (unsaved.size() >= settings.saveEvery()) saveUnsaved();
+            unsaved.computeIfAbsent(folderOf(path), ignored -> new ArrayList<>()).add(nameOf(path));
+            if (++unsavedCount >= settings.saveEvery()) saveUnsaved();
         }
 
         synchronized void saveUnsaved() {
-            if (unsaved.isEmpty()) return;
-            store.write(prefix + saves++ + LIST_EXTENSION, String.join(LINE, unsaved).getBytes(StandardCharsets.UTF_8));
+            int save = saves++;
+            unsaved.forEach((folder, names) -> store.write(owner + ROUNDS + SEPARATOR + id + SEPARATOR + folder
+                    + SEPARATOR + save + EXTENSION, String.join(LINE, names).getBytes(StandardCharsets.UTF_8)));
             unsaved.clear();
+            unsavedCount = 0;
         }
 
-        synchronized Map<String, Set<String>> byFolder() {
-            return written;
-        }
-
-        void renew() {
+        synchronized void renew() {
             if (lost) return;
             try {
-                Optional<Turn> held = store.read(owner + TURN).map(Turn::of);
-                if (held.isEmpty() || !held.get().id().equals(id)) {
+                if (!holdsTurn(this)) {
                     lost = true;
                     return;
                 }
-                store.write(owner + TURN, turnOf(id));
+                store.write(turnPath(owner, turn), turnContent(id, ++renewals));
             } catch (RuntimeException e) {
                 return;
             }

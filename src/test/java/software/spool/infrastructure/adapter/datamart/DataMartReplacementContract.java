@@ -27,9 +27,11 @@ abstract class DataMartReplacementContract {
     static final MountTarget APP = MountTarget.transformation("payments", new PartitionKey("source=app"));
     static final String LISTS = ".spool/";
     static final MountRoundSettings STOPPING_WITHOUT_RENEWING = new MountRoundSettings(1, Duration.ofMillis(300),
-            Duration.ofHours(1), Duration.ofMillis(20));
+            Duration.ofHours(1), Duration.ofMillis(20), System::nanoTime);
     static final MountRoundSettings WAITING_BRIEFLY = new MountRoundSettings(1000, Duration.ofMillis(300),
-            Duration.ofMillis(100), Duration.ofMillis(20));
+            Duration.ofMillis(100), Duration.ofMillis(20), System::nanoTime);
+    static final MountRoundSettings RENEWING_OFTEN = new MountRoundSettings(1000, Duration.ofMillis(300),
+            Duration.ofMillis(50), Duration.ofMillis(20), System::nanoTime);
 
     /** The writer of the data mart, the same one in every call, as a mounter keeps it. */
     abstract DataMartWriter writer();
@@ -158,6 +160,71 @@ abstract class DataMartReplacementContract {
 
         assertThat(results()).containsExactlyInAnyOrderElementsOf(List.of(
                 pathOf(WEB, result(SPAIN, "payment-1")), pathOf(WEB, result(FRANCE, "payment-2"))));
+    }
+
+    @Test
+    void beginRound_whileARoundThatKeepsRenewingLastsLongerThanItsTurn_keepsWaiting() throws Exception {
+        DataMartWriter renewing = writerWith(RENEWING_OFTEN);
+        renewing.beginRound(WEB);
+        DataMartWriter next = writerWith(WAITING_BRIEFLY);
+        CompletableFuture<Void> nextRound = CompletableFuture.runAsync(() -> {
+            next.beginRound(WEB);
+            next.completeRound(WEB);
+        });
+
+        Thread.sleep(1000);
+        assertThat(nextRound).isNotDone();
+        renewing.completeRound(WEB);
+        nextRound.get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void beginRound_whileARoundOfAProcessWhoseTimeIsBehindIsOpen_keepsWaiting() throws Exception {
+        DataMartWriter behind = writerWith(RENEWING_OFTEN.withElapsed(() -> System.nanoTime() - Duration.ofHours(1).toNanos()));
+        behind.beginRound(WEB);
+        behind.write(WEB, Stream.of(result(ALL, "total=40")));
+        DataMartWriter next = writerWith(WAITING_BRIEFLY);
+        CompletableFuture<Void> nextRound = CompletableFuture.runAsync(() -> {
+            next.beginRound(WEB);
+            next.write(WEB, Stream.of(result(ALL, "total=45")));
+            next.completeRound(WEB);
+        });
+
+        Thread.sleep(1000);
+        assertThat(nextRound).isNotDone();
+        behind.completeRound(WEB);
+        nextRound.get(5, TimeUnit.SECONDS);
+
+        assertThat(results()).containsExactly(pathOf(WEB, result(ALL, "total=45")));
+    }
+
+    @Test
+    void completeRound_afterTakingTheTurnOfAStoppedRound_leavesOnlyTheListsInTheDataMart() throws Exception {
+        DataMartWriter stopped = writerWith(STOPPING_WITHOUT_RENEWING);
+        stopped.beginRound(WEB);
+        stopped.write(WEB, Stream.of(result(ALL, "total=40")));
+        DataMartWriter next = writerWith(WAITING_BRIEFLY);
+
+        CompletableFuture.runAsync(() -> {
+            next.beginRound(WEB);
+            next.write(WEB, Stream.of(result(ALL, "total=45")));
+            next.completeRound(WEB);
+        }).get(5, TimeUnit.SECONDS);
+
+        assertThat(allObjects()).filteredOn(path -> path.startsWith(LISTS)).allMatch(path -> path.contains("/lists/"));
+    }
+
+    @Test
+    void write_inAnOpenRound_savesWhatItWroteByPartition() {
+        DataMartWriter writer = writerWith(STOPPING_WITHOUT_RENEWING);
+        writer.beginRound(WEB);
+
+        writer.write(WEB, Stream.of(result(SPAIN, "payment-1"), result(FRANCE, "payment-2")));
+
+        assertThat(allObjects()).filteredOn(path -> path.contains("/rounds/"))
+                .hasSize(2)
+                .anyMatch(path -> path.contains("/country=ES/"))
+                .anyMatch(path -> path.contains("/country=FR/"));
     }
 
     @Test
