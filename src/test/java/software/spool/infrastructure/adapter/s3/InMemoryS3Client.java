@@ -16,6 +16,7 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.IOException;
@@ -85,11 +86,20 @@ public final class InMemoryS3Client implements S3Client {
     @Override
     public PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {
         count(PUT);
+        StoredObject stored;
         try {
-            objects.put(request.key(), new StoredObject(body.contentStreamProvider().newStream().readAllBytes(), Instant.now(),
-                    request.contentType(), Map.copyOf(request.metadata())));
+            stored = new StoredObject(body.contentStreamProvider().newStream().readAllBytes(), Instant.now(),
+                    request.contentType(), Map.copyOf(request.metadata()));
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
+        }
+        if ("*".equals(request.ifNoneMatch())) {
+            if (objects.putIfAbsent(request.key(), stored) != null) {
+                throw (S3Exception) S3Exception.builder().statusCode(412)
+                        .message("At least one of the pre-conditions you specified did not hold").build();
+            }
+        } else {
+            objects.put(request.key(), stored);
         }
         return PutObjectResponse.builder().build();
     }

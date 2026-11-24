@@ -7,11 +7,7 @@ import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedRecord;
 import software.spool.mounter.api.utils.BoundedConcurrency;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.stream.Stream;
 
 /**
@@ -19,12 +15,15 @@ import java.util.stream.Stream;
  *
  * <p>The records are taken from the stream by the calling thread, one at a time, so the aggregator that produces
  * them stays sequential. Only the writing of each file runs on the threads of a {@link BoundedConcurrency}.</p>
+ *
+ * <p>It keeps the list of what each mount wrote, as {@link MountRounds} says, so a round of a full mount that ends well
+ * removes what the mount no longer writes.</p>
  */
 public class FileSystemDataMartWriter implements DataMartWriter {
-    private final Path basePath;
+    private final DataMartStore store;
     private final RecordSerializer<Object> serializer;
     private final BoundedConcurrency concurrency;
-    private final WrittenDataMartObjects written = new WrittenDataMartObjects();
+    private final MountRounds rounds;
 
     /**
      * Creates a writer that owns a pool with one thread per available processor.
@@ -53,9 +52,15 @@ public class FileSystemDataMartWriter implements DataMartWriter {
      * @param concurrency the pool and window the files are written with
      */
     public FileSystemDataMartWriter(Path basePath, RecordSerializer<Object> serializer, BoundedConcurrency concurrency) {
-        this.basePath = basePath;
+        this(basePath, serializer, concurrency, MountRoundSettings.DEFAULT);
+    }
+
+    FileSystemDataMartWriter(Path basePath, RecordSerializer<Object> serializer, BoundedConcurrency concurrency,
+                             MountRoundSettings rounds) {
+        this.store = new FileSystemDataMartStore(basePath);
         this.serializer = serializer;
         this.concurrency = concurrency;
+        this.rounds = new MountRounds(store, rounds);
     }
 
     public FileSystemDataMartWriter(String basePath) {
@@ -69,48 +74,23 @@ public class FileSystemDataMartWriter implements DataMartWriter {
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
         concurrency.forEach(result, partitioned -> DataMartObject.of(target, partitioned, serializer).forEach(object -> {
-            write(object);
-            written.note(target, object);
+            store.write(object.path(), object.content());
+            rounds.note(target, object.path());
         }));
     }
 
     @Override
-    public void keepOnlyWhatWasWritten(MountTarget target) {
-        written.take(target).forEach((folder, kept) -> filesIn(folder).stream()
-                .filter(path -> !kept.contains(path))
-                .forEach(path -> delete(basePath.resolve(path))));
+    public void beginRound(MountTarget target) {
+        rounds.begin(target);
     }
 
     @Override
-    public void forgetWhatWasWritten(MountTarget target) {
-        written.take(target);
+    public void completeRound(MountTarget target) {
+        rounds.complete(target);
     }
 
-    private List<String> filesIn(String folder) {
-        try (Stream<Path> files = Files.list(basePath.resolve(folder))) {
-            return files.filter(Files::isRegularFile)
-                    .map(file -> WrittenDataMartObjects.pathIn(folder, file.getFileName().toString()))
-                    .toList();
-        } catch (IOException e) {
-            throw new UncheckedIOException("Data mart folder could not be listed: " + folder, e);
-        }
-    }
-
-    private static void delete(Path file) {
-        try {
-            Files.deleteIfExists(file);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Result no longer written could not be removed: " + file, e);
-        }
-    }
-
-    private void write(DataMartObject object) {
-        Path file = basePath.resolve(object.path());
-        try {
-            Files.createDirectories(file.getParent());
-            Files.write(file, object.content());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+    @Override
+    public void abandonRound(MountTarget target) {
+        rounds.abandon(target);
     }
 }

@@ -1,16 +1,21 @@
 package software.spool.infrastructure.adapter.datamart;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import software.spool.core.adapter.jackson.RecordSerializerFactory;
+import software.spool.core.model.vo.PartitionKey;
+import software.spool.mounter.api.model.GenericRecord;
 import software.spool.mounter.api.port.DataMartWriter;
+import software.spool.mounter.api.port.MountTarget;
+import software.spool.mounter.api.port.PartitionedRecord;
 import software.spool.mounter.api.utils.BoundedConcurrency;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.stream.Stream;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 class FileSystemDataMartReplacementTest extends DataMartReplacementContract {
     @TempDir
@@ -24,21 +29,38 @@ class FileSystemDataMartReplacementTest extends DataMartReplacementContract {
         concurrency.close();
     }
 
+    @Test
+    void completeRound_resultWithABinaryPayload_keepsItsTwoFiles() {
+        round(WEB, new PartitionedRecord<>(ALL, BinaryResults.pdfRecord()));
+
+        round(WEB, new PartitionedRecord<>(ALL, BinaryResults.pdfRecord()));
+
+        assertThat(results()).hasSize(2);
+    }
+
     @Override
     DataMartWriter writer() {
-        if (writer == null) writer = new FileSystemDataMartWriter(dataMart, concurrency);
+        if (writer == null) writer = new FileSystemDataMartWriter(dataMart, RecordSerializerFactory.record(), concurrency);
         return writer;
     }
 
     @Override
-    List<String> objects() {
-        try (Stream<Path> walk = Files.walk(dataMart)) {
-            return walk.filter(Files::isRegularFile)
-                    .map(file -> dataMart.relativize(file).toString().replace(java.io.File.separatorChar, '/'))
-                    .sorted()
-                    .toList();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+    DataMartWriter writerWith(MountRoundSettings settings) {
+        return new FileSystemDataMartWriter(dataMart, RecordSerializerFactory.record(), concurrency, settings);
+    }
+
+    @Override
+    PartitionedRecord<?> result(PartitionKey partition, String content) {
+        return new PartitionedRecord<>(partition, GenericRecord.of(Map.of("value", content)));
+    }
+
+    @Override
+    String pathOf(MountTarget target, PartitionedRecord<?> result) {
+        return DataMartObject.of(target, result, RecordSerializerFactory.record()).getFirst().path();
+    }
+
+    @Override
+    List<String> allObjects() {
+        return new FileSystemDataMartStore(dataMart).objectsUnder("").stream().sorted().toList();
     }
 }
