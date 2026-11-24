@@ -210,6 +210,7 @@ registered for that port, so a plugin cannot be added without appearing here.
 | Error router | `ErrorRouterProvider` | `DEFAULT` | none |
 | Terraform of a piece | `ProvisioningProvider` | `IN_MEMORY`, `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA`, `POSTGRESQL` | the configuration of the piece: see below |
 | Health check of a piece | `HealthProbeProvider` | `FILE_SYSTEM`, `RAW_FILE_SYSTEM`, `S3`, `KAFKA`, `POSTGRESQL` | the configuration of the piece |
+| Processed keys of an inbox | `ProcessedKeyRepositoryProvider` | `FILE_SYSTEM`, `S3` | the configuration of the inbox piece |
 | Authentication | `RequestAuthenticatorProvider` | `OIDC`, `HMAC_SIGNATURE` | `OIDC`: `issuer`, `audience`, `jwksUri` and `rolesClaim` optional. `HMAC_SIGNATURE`: `header`, `secret`, `timestampHeader`, `tolerance` and `roles` optional |
 
 The `S3` adapters also read `accessKeyEnv` and `secretKeyEnv`, the names of the environment variables with the
