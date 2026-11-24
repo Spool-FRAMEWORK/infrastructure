@@ -2,9 +2,11 @@ package software.spool.infrastructure.adapter.datamart;
 
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.spool.core.adapter.jackson.RecordSerializerFactory;
 import software.spool.core.port.serde.RecordSerializer;
+import software.spool.infrastructure.adapter.s3.S3ObjectKeys;
 import software.spool.mounter.api.port.DataMartWriter;
 import software.spool.mounter.api.port.MountTarget;
 import software.spool.mounter.api.port.PartitionedRecord;
@@ -22,6 +24,7 @@ public class S3DataMartWriter implements DataMartWriter {
     private final String bucket;
     private final RecordSerializer<Object> serializer;
     private final BoundedConcurrency concurrency;
+    private final WrittenDataMartObjects written = new WrittenDataMartObjects();
 
     public S3DataMartWriter(S3Client s3Client, String bucket, BoundedConcurrency concurrency) {
         this(s3Client, bucket, RecordSerializerFactory.record(), concurrency);
@@ -36,7 +39,27 @@ public class S3DataMartWriter implements DataMartWriter {
 
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
-        concurrency.forEach(result, partitioned -> DataMartObject.of(target, partitioned, serializer).forEach(this::put));
+        concurrency.forEach(result, partitioned -> DataMartObject.of(target, partitioned, serializer).forEach(object -> {
+            put(object);
+            written.note(target, object);
+        }));
+    }
+
+    @Override
+    public void keepOnlyWhatWasWritten(MountTarget target) {
+        written.take(target).forEach((folder, kept) -> S3ObjectKeys.under(s3Client, bucket, folder + "/").stream()
+                .filter(key -> WrittenDataMartObjects.folderOf(key).equals(folder))
+                .filter(key -> !kept.contains(key))
+                .forEach(this::delete));
+    }
+
+    @Override
+    public void forgetWhatWasWritten(MountTarget target) {
+        written.take(target);
+    }
+
+    private void delete(String key) {
+        s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
     }
 
     private void put(DataMartObject object) {

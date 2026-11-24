@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Stream;
 
 /**
@@ -23,6 +24,7 @@ public class FileSystemDataMartWriter implements DataMartWriter {
     private final Path basePath;
     private final RecordSerializer<Object> serializer;
     private final BoundedConcurrency concurrency;
+    private final WrittenDataMartObjects written = new WrittenDataMartObjects();
 
     /**
      * Creates a writer that owns a pool with one thread per available processor.
@@ -66,7 +68,40 @@ public class FileSystemDataMartWriter implements DataMartWriter {
 
     @Override
     public void write(MountTarget target, Stream<PartitionedRecord<?>> result) {
-        concurrency.forEach(result, partitioned -> DataMartObject.of(target, partitioned, serializer).forEach(this::write));
+        concurrency.forEach(result, partitioned -> DataMartObject.of(target, partitioned, serializer).forEach(object -> {
+            write(object);
+            written.note(target, object);
+        }));
+    }
+
+    @Override
+    public void keepOnlyWhatWasWritten(MountTarget target) {
+        written.take(target).forEach((folder, kept) -> filesIn(folder).stream()
+                .filter(path -> !kept.contains(path))
+                .forEach(path -> delete(basePath.resolve(path))));
+    }
+
+    @Override
+    public void forgetWhatWasWritten(MountTarget target) {
+        written.take(target);
+    }
+
+    private List<String> filesIn(String folder) {
+        try (Stream<Path> files = Files.list(basePath.resolve(folder))) {
+            return files.filter(Files::isRegularFile)
+                    .map(file -> WrittenDataMartObjects.pathIn(folder, file.getFileName().toString()))
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Data mart folder could not be listed: " + folder, e);
+        }
+    }
+
+    private static void delete(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Result no longer written could not be removed: " + file, e);
+        }
     }
 
     private void write(DataMartObject object) {
