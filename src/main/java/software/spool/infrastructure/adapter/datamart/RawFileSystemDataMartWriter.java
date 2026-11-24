@@ -58,8 +58,9 @@ public class RawFileSystemDataMartWriter implements DataMartWriter {
             Path dir = basePath.resolve(target.qualifiedDataMart()).resolve(partitionPath);
             try {
                 Files.createDirectories(dir);
-                Path file = dir.resolve(IdempotencyKey.of(target.dataMart(), partitioned.record().toString().getBytes()).value() + "." + target.resolveExtension((byte[]) partitioned.record()));
-                Files.write(file, (byte[]) partitioned.record());
+                byte[] content = (byte[]) partitioned.record();
+                Path file = dir.resolve(IdempotencyKey.of(target.dataMart(), content).value() + "." + target.resolveExtension(content));
+                Files.write(file, content);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
